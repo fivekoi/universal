@@ -6,11 +6,13 @@
 // This file is part of the universal numbers project, which is released under an MIT Open Source license.
 // Portions of this file are adapted from work by Chris Sweeney (2015) under the 3-Clause BSD License.
 // See https://github.com/sweeneychris/RpolyPlusPlus for more details
+
 // disable warning STL4037 : The effect of instantiating the template std::complex for any type other than float, double, or long double is unspecified.
 #define _SILENCE_NONFLOATING_COMPLEX_DEPRECATION_WARNING
 
 #include <iostream>
 #include <iomanip>
+
 
 #include <complex>
 
@@ -158,6 +160,7 @@ typename Vector::value_type FindRootIterativeNewton(const Vector& polynomial, co
     
     Real root = x0;
     const Vector derivative = DifferentiatePolynomial(polynomial);
+  
     Real prev;
     for (int i = 0; i < max_iterations; i++) {
         prev = root;
@@ -212,7 +215,6 @@ void SyntheticDivisionAndEvaluate(const Vector& polynomial,
                                   Vector& quotient,
                                   typename Vector::value_type& eval) {
     quotient = Vector(polynomial.size() - 1, 0); 
-  
     quotient[0] = polynomial[0];
     for (size_t i = 1; i < polynomial.size() - 1; i++) {
         quotient[i] = polynomial[i] + quotient[i - 1] * x;
