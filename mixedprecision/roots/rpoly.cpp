@@ -51,29 +51,39 @@ using namespace std;
 #define MAXDEGREE 100
 #define MDP1 MAXDEGREE+1
 
-void rpoly_ak1(double op[MDP1], int* Degree, double zeror[MAXDEGREE], double zeroi[MAXDEGREE]);
-void Fxshfr_ak1(int L2, int* NZ, double sr, double bnd, double K[MDP1], int N, double p[MDP1], int NN, double qp[MDP1], double* lzi, double* lzr, double* szi, double* szr);
-void QuadSD_ak1(int NN, double u, double v, double p[MDP1], double q[MDP1], double* a, double* b);
-int calcSC_ak1(int N, double a, double b, double* a1, double* a3, double* a7, double* c, double* d, double* e, double* f, double* g, double* h, double K[MDP1], double u, double v, double qk[MDP1]);
-void nextK_ak1(int N, int tFlag, double a, double b, double a1, double* a3, double* a7, double K[MDP1], double qk[MDP1], double qp[MDP1]);
-void newest_ak1(int tFlag, double* uu, double* vv, double a, double a1, double a3, double a7, double b, double c, double d, double f, double g, double h, double u, double v, double K[MDP1], int N, double p[MDP1]);
-void QuadIT_ak1(int N, int* NZ, double uu, double vv, double* szr, double* szi, double* lzr, double* lzi, double qp[MDP1], int NN, double* a, double* b, double p[MDP1], double qk[MDP1], double* a1, double* a3, double* a7, double* d, double* e, double* f, double* g, double* h, double K[MDP1]);
-void RealIT_ak1(int* iFlag, int* NZ, double* sss, int N, double p[MDP1], int NN, double qp[MDP1], double* szr, double* szi, double K[MDP1], double qk[MDP1]);
-void Quad_ak1(double a, double b1, double c, double* sr, double* si, double* lr, double* li);
+template <typename Real>
+void rpoly_ak1(Real op[MDP1], int* Degree, Real zeror[MAXDEGREE], Real zeroi[MAXDEGREE]);
+template <typename Real>
+void Fxshfr_ak1(int L2, int* NZ, Real sr, Real bnd, Real K[MDP1], int N, Real p[MDP1], int NN, Real qp[MDP1], Real* lzi, Real* lzr, Real* szi, Real* szr);
+template <typename Real>
+void QuadSD_ak1(int NN, Real u, Real v, Real p[MDP1], Real q[MDP1], Real* a, Real* b);
+template <typename Real>
+int calcSC_ak1(int N, Real a, Real b, Real* a1, Real* a3, Real* a7, Real* c, Real* d, Real* e, Real* f, Real* g, Real* h, Real K[MDP1], Real u, Real v, Real qk[MDP1]);
+template <typename Real>
+void nextK_ak1(int N, int tFlag, Real a, Real b, Real a1, Real* a3, Real* a7, Real K[MDP1], Real qk[MDP1], Real qp[MDP1]);
+template <typename Real>
+void newest_ak1(int tFlag, Real* uu, Real* vv, Real a, Real a1, Real a3, Real a7, Real b, Real c, Real d, Real f, Real g, Real h, Real u, Real v, Real K[MDP1], int N, Real p[MDP1]);
+template <typename Real>
+void QuadIT_ak1(int N, int* NZ, Real uu, Real vv, Real* szr, Real* szi, Real* lzr, Real* lzi, Real qp[MDP1], int NN, Real* a, Real* b, Real p[MDP1], Real qk[MDP1], Real* a1, Real* a3, Real* a7, Real* d, Real* e, Real* f, Real* g, Real* h, Real K[MDP1]);
+template <typename Real>
+void RealIT_ak1(int* iFlag, int* NZ, Real* sss, int N, Real p[MDP1], int NN, Real qp[MDP1], Real* szr, Real* szi, Real K[MDP1], Real qk[MDP1]);
+template <typename Real>
+void Quad_ak1(Real a, Real b1, Real c, Real* sr, Real* si, Real* lr, Real* li);
 
-void rpoly_ak1(double op[MDP1], int* Degree, double zeror[MAXDEGREE], double zeroi[MAXDEGREE]){
+template <typename Real>
+void rpoly_ak1(Real op[MDP1], int* Degree, Real zeror[MAXDEGREE], Real zeroi[MAXDEGREE]){
 
     int i, j, jj, l, N, NM1, NN, NZ, zerok;
 
-    double K[MDP1], p[MDP1], pt[MDP1], qp[MDP1], temp[MDP1];
-    double bnd, df, dx, factor, ff, moduli_max, moduli_min, sc, x, xm;
-    double aa, bb, cc, lzi, lzr, sr, szi, szr, t, xx, xxx, yy;
+    Real K[MDP1], p[MDP1], pt[MDP1], qp[MDP1], temp[MDP1];
+    Real bnd, df, dx, factor, ff, moduli_max, moduli_min, sc, x, xm;
+    Real aa, bb, cc, lzi, lzr, sr, szi, szr, t, xx, xxx, yy;
 
-    const double RADFAC = 3.14159265358979323846/180; // Degrees-to-radians conversion factor = pi/180
-    const double lb2 = log(2.0); // Dummy variable to avoid re-calculating this value in loop below
-    const double lo = FLT_MIN/DBL_EPSILON;
-    const double cosr = cos(94.0*RADFAC); // = -0.069756474
-    const double sinr = sin(94.0*RADFAC); // = 0.99756405
+    const Real RADFAC = 3.14159265358979323846/180; // Degrees-to-radians conversion factor = pi/180
+    const Real lb2 = log(2.0); // Dummy variable to avoid re-calculating this value in loop below
+    const Real lo = FLT_MIN/DBL_EPSILON; // TODO: figure out what this does, might need to loosen so lower precisions converge
+    const Real cosr = cos(94.0*RADFAC); // = -0.069756474
+    const Real sinr = sin(94.0*RADFAC); // = 0.99756405
 
     if ((*Degree) > MAXDEGREE){
         cout << "\nThe entered Degree is greater than MAXDEGREE. Exiting rpoly. No further action taken.\n";
@@ -152,7 +162,7 @@ void rpoly_ak1(double op[MDP1], int* Degree, double zeror[MAXDEGREE], double zer
 
         // Compute upper estimate of bound
 
-        x = exp((log(-pt[N]) - log(pt[0]))/(double)N);
+        x = exp((log(-pt[N]) - log(pt[0]))/(Real)N);
 
         if (pt[NM1] != 0) {
             // If Newton step at the origin is better, use it
@@ -189,7 +199,7 @@ void rpoly_ak1(double op[MDP1], int* Degree, double zeror[MAXDEGREE], double zer
 
         // Compute the derivative as the initial K polynomial and do 5 steps with no shift
 
-        for (i = 1; i < N; i++)   K[i] = (double)(N - i)*p[i]/((double)N);
+        for (i = 1; i < N; i++)   K[i] = (Real)(N - i)*p[i]/((Real)N);
         K[0] = p[0];
 
         aa = p[N];
@@ -286,520 +296,526 @@ void rpoly_ak1(double op[MDP1], int* Degree, double zeror[MAXDEGREE], double zer
     return;
 } // End rpoly_ak1
 
-void Fxshfr_ak1(int L2, int* NZ, double sr, double bnd, double K[MDP1], int N, double p[MDP1], int NN, double qp[MDP1], double* lzi, double* lzr, double* szi, double* szr){
+template <typename Real>
+void Fxshfr_ak1(int L2, int* NZ, Real sr, Real bnd, Real K[MDP1], int N, Real p[MDP1], int NN, Real qp[MDP1], Real* lzi, Real* lzr, Real* szi, Real* szr){
+    // Computes up to L2 fixed shift K-polynomials, testing for convergence in the linear or
+    // quadratic case. Initiates one of the variable shift iterations and returns with the
+    // number of zeros found.
 
-// Computes up to L2 fixed shift K-polynomials, testing for convergence in the linear or
-// quadratic case. Initiates one of the variable shift iterations and returns with the
-// number of zeros found.
+    // L2 limit of fixed shift steps
+    // NZ number of zeros found
 
-// L2 limit of fixed shift steps
-// NZ number of zeros found
+    int fflag, i, iFlag, j, spass, stry, tFlag, vpass, vtry;
+    Real a, a1, a3, a7, b, betas, betav, c, d, e, f, g, h, oss, ots, otv, ovv, s, ss, ts, tss, tv, tvv, u, ui, v, vi, vv;
+    Real qk[MDP1], svk[MDP1];
 
-int fflag, i, iFlag, j, spass, stry, tFlag, vpass, vtry;
-double a, a1, a3, a7, b, betas, betav, c, d, e, f, g, h, oss, ots, otv, ovv, s, ss, ts, tss, tv, tvv, u, ui, v, vi, vv;
-double qk[MDP1], svk[MDP1];
+    *NZ = 0;
+    betav = betas = 0.25;
+    u = -(2.0*sr);
+    oss = sr;
+    ovv = v = bnd;
 
-*NZ = 0;
-betav = betas = 0.25;
-u = -(2.0*sr);
-oss = sr;
-ovv = v = bnd;
+    //Evaluate polynomial by synthetic division
+    QuadSD_ak1(NN, u, v, p, qp, &a, &b);
 
-//Evaluate polynomial by synthetic division
-QuadSD_ak1(NN, u, v, p, qp, &a, &b);
-
-tFlag = calcSC_ak1(N, a, b, &a1, &a3, &a7, &c, &d, &e, &f, &g, &h, K, u, v, qk);
-
-for (j = 0; j < L2; j++){
-
-    //Calculate next K polynomial and estimate v
-    nextK_ak1(N, tFlag, a, b, a1, &a3, &a7, K, qk, qp);
     tFlag = calcSC_ak1(N, a, b, &a1, &a3, &a7, &c, &d, &e, &f, &g, &h, K, u, v, qk);
-    newest_ak1(tFlag, &ui, &vi, a, a1, a3, a7, b, c, d, f, g, h, u, v, K, N, p);
 
-    vv = vi;
+    for (j = 0; j < L2; j++){
 
-    // Estimate s
+        //Calculate next K polynomial and estimate v
+        nextK_ak1(N, tFlag, a, b, a1, &a3, &a7, K, qk, qp);
+        tFlag = calcSC_ak1(N, a, b, &a1, &a3, &a7, &c, &d, &e, &f, &g, &h, K, u, v, qk);
+        newest_ak1(tFlag, &ui, &vi, a, a1, a3, a7, b, c, d, f, g, h, u, v, K, N, p);
 
-    ss = ((K[N - 1] != 0.0) ? -(p[N]/K[N - 1]) : 0.0);
+        vv = vi;
 
-    ts = tv = 1.0;
+        // Estimate s
 
-    if ((j != 0) && (tFlag != 3)){
+        ss = ((K[N - 1] != 0.0) ? -(p[N]/K[N - 1]) : 0.0);
 
-       // Compute relative measures of convergence of s and v sequences
+        ts = tv = 1.0;
 
-        tv = ((vv != 0.0) ? fabs((vv - ovv)/vv) : tv);
-        ts = ((ss != 0.0) ? fabs((ss - oss)/ss) : ts);
+        if ((j != 0) && (tFlag != 3)){
 
-        // If decreasing, multiply the two most recent convergence measures
+        // Compute relative measures of convergence of s and v sequences
 
-        tvv = ((tv < otv) ? tv*otv : 1.0);
-        tss = ((ts < ots) ? ts*ots : 1.0);
+            tv = ((vv != 0.0) ? fabs((vv - ovv)/vv) : tv);
+            ts = ((ss != 0.0) ? fabs((ss - oss)/ss) : ts);
 
-        // Compare with convergence criteria
+            // If decreasing, multiply the two most recent convergence measures
 
-        vpass = ((tvv < betav) ? 1 : 0);
-        spass = ((tss < betas) ? 1 : 0);
+            tvv = ((tv < otv) ? tv*otv : 1.0);
+            tss = ((ts < ots) ? ts*ots : 1.0);
 
-        if ((spass) || (vpass)){
+            // Compare with convergence criteria
 
-            // At least one sequence has passed the convergence test.
-            // Store variables before iterating
+            vpass = ((tvv < betav) ? 1 : 0);
+            spass = ((tss < betas) ? 1 : 0);
 
-            for (i = 0; i < N; i++)   svk[i] = K[i];
+            if ((spass) || (vpass)){
 
-            s = ss;
+                // At least one sequence has passed the convergence test.
+                // Store variables before iterating
 
-            // Choose iteration according to the fastest converging sequence
+                for (i = 0; i < N; i++)   svk[i] = K[i];
 
-            stry = vtry = 0;
-            fflag = 1;
+                s = ss;
 
-            do {
+                // Choose iteration according to the fastest converging sequence
 
-                iFlag = 1; // Begin each loop by assuming RealIT will be called UNLESS iFlag changed below
+                stry = vtry = 0;
+                fflag = 1;
 
-                if ((fflag && ((fflag = 0) == 0)) && ((spass) && (!vpass || (tss < tvv)))){
-                    ; // Do nothing. Provides a quick "short circuit".
-                } // End if (fflag)
+                do {
 
-                else { // else !fflag
-                    QuadIT_ak1(N, NZ, ui, vi, szr, szi, lzr, lzi, qp, NN, &a, &b, p, qk, &a1, &a3, &a7, &d, &e, &f, &g, &h, K);
+                    iFlag = 1; // Begin each loop by assuming RealIT will be called UNLESS iFlag changed below
 
-                    if ((*NZ) > 0)   return;
+                    if ((fflag && ((fflag = 0) == 0)) && ((spass) && (!vpass || (tss < tvv)))){
+                        ; // Do nothing. Provides a quick "short circuit".
+                    } // End if (fflag)
 
-                    // Quadratic iteration has failed. Flag that it has been tried and decrease the
-                    // convergence criterion
+                    else { // else !fflag
+                        QuadIT_ak1(N, NZ, ui, vi, szr, szi, lzr, lzi, qp, NN, &a, &b, p, qk, &a1, &a3, &a7, &d, &e, &f, &g, &h, K);
 
-                    vtry = 1;
-                    betav *= 0.25;
+                        if ((*NZ) > 0)   return;
 
-                    // Try linear iteration if it has not been tried and the s sequence is converging
-                    if (stry || (!spass)){
-                        iFlag = 0;
-                    } // End if (stry || (!spass))
-                    else {
-                        for (i = 0; i < N; i++)   K[i] = svk[i];
-                    } // End if (stry || !spass)
+                        // Quadratic iteration has failed. Flag that it has been tried and decrease the
+                        // convergence criterion
 
-                } // End else !fflag
+                        vtry = 1;
+                        betav *= 0.25;
 
-                if (iFlag != 0){
-                    RealIT_ak1(&iFlag, NZ, &s, N, p, NN, qp, szr, szi, K, qk);
+                        // Try linear iteration if it has not been tried and the s sequence is converging
+                        if (stry || (!spass)){
+                            iFlag = 0;
+                        } // End if (stry || (!spass))
+                        else {
+                            for (i = 0; i < N; i++)   K[i] = svk[i];
+                        } // End if (stry || !spass)
 
-                    if ((*NZ) > 0)   return;
-
-                    // Linear iteration has failed. Flag that it has been tried and decrease the
-                    // convergence criterion
-
-                    stry = 1;
-                    betas *= 0.25;
+                    } // End else !fflag
 
                     if (iFlag != 0){
+                        RealIT_ak1(&iFlag, NZ, &s, N, p, NN, qp, szr, szi, K, qk);
 
-                        // If linear iteration signals an almost double real zero, attempt quadratic iteration
+                        if ((*NZ) > 0)   return;
 
-                        ui = -(s + s);
-                        vi = s*s;
-                        continue;
+                        // Linear iteration has failed. Flag that it has been tried and decrease the
+                        // convergence criterion
 
+                        stry = 1;
+                        betas *= 0.25;
+
+                        if (iFlag != 0){
+
+                            // If linear iteration signals an almost double real zero, attempt quadratic iteration
+
+                            ui = -(s + s);
+                            vi = s*s;
+                            continue;
+
+                        } // End if (iFlag != 0)
                     } // End if (iFlag != 0)
-                } // End if (iFlag != 0)
 
-                // Restore variables
-                for (i = 0; i < N; i++)   K[i] = svk[i];
+                    // Restore variables
+                    for (i = 0; i < N; i++)   K[i] = svk[i];
 
-                // Try quadratic iteration if it has not been tried and the v sequence is converging
+                    // Try quadratic iteration if it has not been tried and the v sequence is converging
 
-            } while (vpass && !vtry); // End do-while loop
+                } while (vpass && !vtry); // End do-while loop
 
-            // Re-compute qp and scalar values to continue the second stage
+                // Re-compute qp and scalar values to continue the second stage
 
-            QuadSD_ak1(NN, u, v, p, qp, &a, &b);
-            tFlag = calcSC_ak1(N, a, b, &a1, &a3, &a7, &c, &d, &e, &f, &g, &h, K, u, v, qk);
+                QuadSD_ak1(NN, u, v, p, qp, &a, &b);
+                tFlag = calcSC_ak1(N, a, b, &a1, &a3, &a7, &c, &d, &e, &f, &g, &h, K, u, v, qk);
 
-        } // End if ((spass) || (vpass))
+            } // End if ((spass) || (vpass))
 
-    } // End if ((j != 0) && (tFlag != 3))
+        } // End if ((j != 0) && (tFlag != 3))
 
-    ovv = vv;
-    oss = ss;
-    otv = tv;
-    ots = ts;
-} // End for j
-
-return;
-} // End Fxshfr_ak1
-
-void QuadSD_ak1(int NN, double u, double v, double p[MDP1], double q[MDP1], double* a, double* b){
-
-// Divides p by the quadratic 1, u, v placing the quotient in q and the remainder in a, b
-
-int i;
-
-q[0] = *b = p[0];
-q[1] = *a = -((*b)*u) + p[1];
-
-for (i = 2; i < NN; i++){
-    q[i] = -((*a)*u + (*b)*v) + p[i];
-    *b = (*a);
-    *a = q[i];
-} // End for i
-
-return;
-} // End QuadSD_ak1
-
-int calcSC_ak1(int N, double a, double b, double* a1, double* a3, double* a7, double* c, double* d, double* e, double* f, double* g, double* h, double K[MDP1], double u, double v, double qk[MDP1]){
-
-// This routine calculates scalar quantities used to compute the next K polynomial and
-// new estimates of the quadratic coefficients.
-
-// calcSC - integer variable set here indicating how the calculations are normalized
-// to avoid overflow.
-
-int dumFlag = 3; // TYPE = 3 indicates the quadratic is almost a factor of K
-
-// Synthetic division of K by the quadratic 1, u, v
-QuadSD_ak1(N, u, v, K, qk, c, d);
-
-if (fabs((*c)) <= (100.0*DBL_EPSILON*fabs(K[N - 1]))) {
-    if (fabs((*d)) <= (100.0*DBL_EPSILON*fabs(K[N - 2])))   return dumFlag;
-} // End if (fabs(c) <= (100.0*DBL_EPSILON*fabs(K[N - 1])))
-
-*h = v*b;
-if (fabs((*d)) >= fabs((*c))){
-    dumFlag = 2; // TYPE = 2 indicates that all formulas are divided by d
-    *e = a/(*d);
-    *f = (*c)/(*d);
-    *g = u*b;
-    *a3 = (*e)*((*g) + a) + (*h)*(b/(*d));
-    *a1 = -a + (*f)*b;
-    *a7 = (*h) + ((*f) + u)*a;
-} // End if(fabs(d) >= fabs(c))
-else {
-    dumFlag = 1; // TYPE = 1 indicates that all formulas are divided by c;
-    *e = a/(*c);
-    *f = (*d)/(*c);
-    *g = (*e)*u;
-    *a3 = (*e)*a + ((*g) + (*h)/(*c))*b;
-    *a1 = -(a*((*d)/(*c))) + b;
-    *a7 = (*g)*(*d) + (*h)*(*f) + a;
-} // End else
-
-return dumFlag;
-} // End calcSC_ak1
-
-void nextK_ak1(int N, int tFlag, double a, double b, double a1, double* a3, double* a7, double K[MDP1], double qk[MDP1], double qp[MDP1]){
-
-// Computes the next K polynomials using the scalars computed in calcSC_ak1
-
-int i;
-double temp;
-
-if (tFlag == 3){ // Use unscaled form of the recurrence
-    K[1] = K[0] = 0.0;
-
-    for (i = 2; i < N; i++)   K[i] = qk[i - 2];
+        ovv = vv;
+        oss = ss;
+        otv = tv;
+        ots = ts;
+    } // End for j
 
     return;
-} // End if (tFlag == 3)
+} // End Fxshfr_ak1
 
-temp = ((tFlag == 1) ? b : a);
+template <typename Real>
+void QuadSD_ak1(int NN, Real u, Real v, Real p[MDP1], Real q[MDP1], Real* a, Real* b){
+    // Divides p by the quadratic 1, u, v placing the quotient in q and the remainder in a, b
 
-if (fabs(a1) > (10.0*DBL_EPSILON*fabs(temp))){
-    // Use scaled form of the recurrence
+    int i;
 
-    (*a7) /= a1;
-    (*a3) /= a1;
-    K[0] = qp[0];
-    K[1] = -((*a7)*qp[0]) + qp[1];
+    q[0] = *b = p[0];
+    q[1] = *a = -((*b)*u) + p[1];
 
-    for (i = 2; i < N; i++)   K[i] = -((*a7)*qp[i - 1]) + (*a3)*qk[i - 2] + qp[i];
+    for (i = 2; i < NN; i++){
+        q[i] = -((*a)*u + (*b)*v) + p[i];
+        *b = (*a);
+        *a = q[i];
+    } // End for i
 
-} // End if (fabs(a1) > (10.0*DBL_EPSILON*fabs(temp)))
-else {
-    // If a1 is nearly zero, then use a special form of the recurrence
+    return;
+} // End QuadSD_ak1
 
-    K[0] = 0.0;
-    K[1] = -(*a7)*qp[0];
+template <typename Real>
+int calcSC_ak1(int N, Real a, Real b, Real* a1, Real* a3, Real* a7, Real* c, Real* d, Real* e, Real* f, Real* g, Real* h, Real K[MDP1], Real u, Real v, Real qk[MDP1]){
 
-    for (i = 2; i < N; i++)   K[i] = -((*a7)*qp[i - 1]) + (*a3)*qk[i - 2];
-} // End else
+    // This routine calculates scalar quantities used to compute the next K polynomial and
+    // new estimates of the quadratic coefficients.
 
-return;
+    // calcSC - integer variable set here indicating how the calculations are normalized
+    // to avoid overflow.
+
+    int dumFlag = 3; // TYPE = 3 indicates the quadratic is almost a factor of K
+
+    // Synthetic division of K by the quadratic 1, u, v
+    QuadSD_ak1(N, u, v, K, qk, c, d);
+
+    if (fabs((*c)) <= (100.0*DBL_EPSILON*fabs(K[N - 1]))) {
+        if (fabs((*d)) <= (100.0*DBL_EPSILON*fabs(K[N - 2])))   return dumFlag;
+    } // End if (fabs(c) <= (100.0*DBL_EPSILON*fabs(K[N - 1])))
+
+    *h = v*b;
+    if (fabs((*d)) >= fabs((*c))){
+        dumFlag = 2; // TYPE = 2 indicates that all formulas are divided by d
+        *e = a/(*d);
+        *f = (*c)/(*d);
+        *g = u*b;
+        *a3 = (*e)*((*g) + a) + (*h)*(b/(*d));
+        *a1 = -a + (*f)*b;
+        *a7 = (*h) + ((*f) + u)*a;
+    } // End if(fabs(d) >= fabs(c))
+    else {
+        dumFlag = 1; // TYPE = 1 indicates that all formulas are divided by c;
+        *e = a/(*c);
+        *f = (*d)/(*c);
+        *g = (*e)*u;
+        *a3 = (*e)*a + ((*g) + (*h)/(*c))*b;
+        *a1 = -(a*((*d)/(*c))) + b;
+        *a7 = (*g)*(*d) + (*h)*(*f) + a;
+    } // End else
+
+    return dumFlag;
+} // End calcSC_ak1
+
+template <typename Real>
+void nextK_ak1(int N, int tFlag, Real a, Real b, Real a1, Real* a3, Real* a7, Real K[MDP1], Real qk[MDP1], Real qp[MDP1]){
+
+    // Computes the next K polynomials using the scalars computed in calcSC_ak1
+
+    int i;
+    Real temp;
+
+    if (tFlag == 3){ // Use unscaled form of the recurrence
+        K[1] = K[0] = 0.0;
+
+        for (i = 2; i < N; i++)   K[i] = qk[i - 2];
+
+        return;
+    } // End if (tFlag == 3)
+
+    temp = ((tFlag == 1) ? b : a);
+
+    if (fabs(a1) > (10.0*DBL_EPSILON*fabs(temp))){
+        // Use scaled form of the recurrence
+
+        (*a7) /= a1;
+        (*a3) /= a1;
+        K[0] = qp[0];
+        K[1] = -((*a7)*qp[0]) + qp[1];
+
+        for (i = 2; i < N; i++)   K[i] = -((*a7)*qp[i - 1]) + (*a3)*qk[i - 2] + qp[i];
+
+    } // End if (fabs(a1) > (10.0*DBL_EPSILON*fabs(temp)))
+    else {
+        // If a1 is nearly zero, then use a special form of the recurrence
+
+        K[0] = 0.0;
+        K[1] = -(*a7)*qp[0];
+
+        for (i = 2; i < N; i++)   K[i] = -((*a7)*qp[i - 1]) + (*a3)*qk[i - 2];
+    } // End else
+
+    return;
 
 } // End nextK_ak1
 
-void newest_ak1(int tFlag, double* uu, double* vv, double a, double a1, double a3, double a7, double b, double c, double d, double f, double g, double h, double u, double v, double K[MDP1], int N, double p[MDP1]){
-// Compute new estimates of the quadratic coefficients using the scalars computed in calcSC_ak1
+template <typename Real>
+void newest_ak1(int tFlag, Real* uu, Real* vv, Real a, Real a1, Real a3, Real a7, Real b, Real c, Real d, Real f, Real g, Real h, Real u, Real v, Real K[MDP1], int N, Real p[MDP1]){
+    // Compute new estimates of the quadratic coefficients using the scalars computed in calcSC_ak1
 
-double a4, a5, b1, b2, c1, c2, c3, c4, temp;
+    Real a4, a5, b1, b2, c1, c2, c3, c4, temp;
 
-(*vv) = (*uu) = 0.0; // The quadratic is zeroed
+    (*vv) = (*uu) = 0.0; // The quadratic is zeroed
 
-if (tFlag != 3){
+    if (tFlag != 3){
 
-    if (tFlag != 2){
-        a4 = a + u*b + h*f;
-        a5 = c + (u + v*f)*d;
-    } // End if (tFlag != 2)
-    else { // else tFlag == 2
-        a4 = (a + g)*f + h;
-        a5 = (f + u)*c + v*d;
-    } // End else tFlag == 2
+        if (tFlag != 2){
+            a4 = a + u*b + h*f;
+            a5 = c + (u + v*f)*d;
+        } // End if (tFlag != 2)
+        else { // else tFlag == 2
+            a4 = (a + g)*f + h;
+            a5 = (f + u)*c + v*d;
+        } // End else tFlag == 2
 
-    // Evaluate new quadratic coefficients
+        // Evaluate new quadratic coefficients
 
-    b1 = -K[N - 1]/p[N];
-    b2 = -(K[N - 2] + b1*p[N - 1])/p[N];
-    c1 = v*b2*a1;
-    c2 = b1*a7;
-    c3 = b1*b1*a3;
-    c4 = -(c2 + c3) + c1;
-    temp = -c4 + a5 + b1*a4;
-    if (temp != 0.0) {
-        *uu= -((u*(c3 + c2) + v*(b1*a1 + b2*a7))/temp) + u;
-        *vv = v*(1.0 + c4/temp);
-    } // End if (temp != 0)
+        b1 = -K[N - 1]/p[N];
+        b2 = -(K[N - 2] + b1*p[N - 1])/p[N];
+        c1 = v*b2*a1;
+        c2 = b1*a7;
+        c3 = b1*b1*a3;
+        c4 = -(c2 + c3) + c1;
+        temp = -c4 + a5 + b1*a4;
+        if (temp != 0.0) {
+            *uu= -((u*(c3 + c2) + v*(b1*a1 + b2*a7))/temp) + u;
+            *vv = v*(1.0 + c4/temp);
+        } // End if (temp != 0)
 
-} // End if (tFlag != 3)
+    } // End if (tFlag != 3)
 
-return;
+    return;
 } // End newest_ak1
 
-void QuadIT_ak1(int N, int* NZ, double uu, double vv, double* szr, double* szi, double* lzr, double* lzi, double qp[MDP1], int NN, double* a, double* b, double p[MDP1], double qk[MDP1], double* a1, double* a3, double* a7, double* d, double* e, double* f, double* g, double* h, double K[MDP1]){
+template <typename Real>
+void QuadIT_ak1(int N, int* NZ, Real uu, Real vv, Real* szr, Real* szi, Real* lzr, Real* lzi, Real qp[MDP1], int NN, Real* a, Real* b, Real p[MDP1], Real qk[MDP1], Real* a1, Real* a3, Real* a7, Real* d, Real* e, Real* f, Real* g, Real* h, Real K[MDP1]){
 
-// Variable-shift K-polynomial iteration for a quadratic factor converges only if the
-// zeros are equimodular or nearly so.
+    // Variable-shift K-polynomial iteration for a quadratic factor converges only if the
+    // zeros are equimodular or nearly so.
 
-int i, j = 0, tFlag, triedFlag = 0;
-double c, ee, mp, omp, relstp, t, u, ui, v, vi, zm;
+    int i, j = 0, tFlag, triedFlag = 0;
+    Real c, ee, mp, omp, relstp, t, u, ui, v, vi, zm;
 
-*NZ = 0; // Number of zeros found
-u = uu; // uu and vv are coefficients of the starting quadratic
-v = vv;
+    *NZ = 0; // Number of zeros found
+    u = uu; // uu and vv are coefficients of the starting quadratic
+    v = vv;
 
-do {
-    Quad_ak1(1.0, u, v, szr, szi, lzr, lzi);
+    do {
+        Quad_ak1(Real(1.0), u, v, szr, szi, lzr, lzi);
 
-    // Return if roots of the quadratic are real and not close to multiple or nearly
-    // equal and of opposite sign.
+        // Return if roots of the quadratic are real and not close to multiple or nearly
+        // equal and of opposite sign.
 
-    if (fabs(fabs(*szr) - fabs(*lzr)) > 0.01*fabs(*lzr))   break;
+        if (fabs(fabs(*szr) - fabs(*lzr)) > 0.01*fabs(*lzr))   break;
 
-    // Evaluate polynomial by quadratic synthetic division
-
-    QuadSD_ak1(NN, u, v, p, qp, a, b);
-
-    mp = fabs(-((*szr)*(*b)) + (*a)) + fabs((*szi)*(*b));
-
-    // Compute a rigorous bound on the rounding error in evaluating p
-
-    zm = sqrt(fabs(v));
-    ee = 2.0*fabs(qp[0]);
-    t = -((*szr)*(*b));
-
-    for (i = 1; i < N; i++)   ee = ee*zm + fabs(qp[i]);
-
-    ee = ee*zm + fabs((*a) + t);
-    ee = (9.0*ee + 2.0*fabs(t) - 7.0*(fabs((*a) + t) + zm*fabs((*b))))*DBL_EPSILON;
-
-    // Iteration has converged sufficiently if the polynomial value is less than 20 times this bound
-
-    if (mp <= 20.0*ee){
-        *NZ = 2;
-        break;
-    } // End if (mp <= 20.0*ee)
-
-    j++;
-
-    // Stop iteration after 20 steps
-    if (j > 20)   break;
-
-    if (j >= 2){
-        if ((relstp <= 0.01) && (mp >= omp) && (!triedFlag)){
-        // A cluster appears to be stalling the convergence. Five fixed shift
-        // steps are taken with a u, v close to the cluster.
-
-        relstp = ((relstp < DBL_EPSILON) ? sqrt(DBL_EPSILON) : sqrt(relstp));
-
-        u -= u*relstp;
-        v += v*relstp;
+        // Evaluate polynomial by quadratic synthetic division
 
         QuadSD_ak1(NN, u, v, p, qp, a, b);
 
-        for (i = 0; i < 5; i++){
-            tFlag = calcSC_ak1(N, *a, *b, a1, a3, a7, &c, d, e, f, g, h, K, u, v, qk);
-            nextK_ak1(N, tFlag, *a, *b, *a1, a3, a7, K, qk, qp);
-        } // End for i
+        mp = fabs(-((*szr)*(*b)) + (*a)) + fabs((*szi)*(*b));
 
-        triedFlag = 1;
-        j = 0;
+        // Compute a rigorous bound on the rounding error in evaluating p
 
-        } // End if ((relstp <= 0.01) && (mp >= omp) && (!triedFlag))
+        zm = sqrt(fabs(v));
+        ee = 2.0*fabs(qp[0]);
+        t = -((*szr)*(*b));
 
-    } // End if (j >= 2)
+        for (i = 1; i < N; i++)   ee = ee*zm + fabs(qp[i]);
 
-    omp = mp;
+        ee = ee*zm + fabs((*a) + t);
+        ee = (9.0*ee + 2.0*fabs(t) - 7.0*(fabs((*a) + t) + zm*fabs((*b))))*DBL_EPSILON;
 
-    // Calculate next K polynomial and new u and v
+        // Iteration has converged sufficiently if the polynomial value is less than 20 times this bound
 
-    tFlag = calcSC_ak1(N, *a, *b, a1, a3, a7, &c, d, e, f, g, h, K, u, v, qk);
-    nextK_ak1(N, tFlag, *a, *b, *a1, a3, a7, K, qk, qp);
-    tFlag = calcSC_ak1(N, *a, *b, a1, a3, a7, &c, d, e, f, g, h, K, u, v, qk);
-    newest_ak1(tFlag, &ui, &vi, *a, *a1, *a3, *a7, *b, c, *d, *f, *g, *h, u, v, K, N, p);
+        if (mp <= 20.0*ee){
+            *NZ = 2;
+            break;
+        } // End if (mp <= 20.0*ee)
 
-    // If vi is zero, the iteration is not converging
-    if (vi != 0){
-        relstp = fabs((-v + vi)/vi);
-        u = ui;
-        v = vi;
-    } // End if (vi != 0)
-} while (vi != 0); // End do-while loop
+        j++;
 
-return;
+        // Stop iteration after 20 steps
+        if (j > 20)   break;
+
+        if (j >= 2){
+            if ((relstp <= 0.01) && (mp >= omp) && (!triedFlag)){
+            // A cluster appears to be stalling the convergence. Five fixed shift
+            // steps are taken with a u, v close to the cluster.
+
+            relstp = ((relstp < DBL_EPSILON) ? sqrt(DBL_EPSILON) : sqrt(relstp));
+
+            u -= u*relstp;
+            v += v*relstp;
+
+            QuadSD_ak1(NN, u, v, p, qp, a, b);
+
+            for (i = 0; i < 5; i++){
+                tFlag = calcSC_ak1(N, *a, *b, a1, a3, a7, &c, d, e, f, g, h, K, u, v, qk);
+                nextK_ak1(N, tFlag, *a, *b, *a1, a3, a7, K, qk, qp);
+            } // End for i
+
+            triedFlag = 1;
+            j = 0;
+
+            } // End if ((relstp <= 0.01) && (mp >= omp) && (!triedFlag))
+
+        } // End if (j >= 2)
+
+        omp = mp;
+
+        // Calculate next K polynomial and new u and v
+
+        tFlag = calcSC_ak1(N, *a, *b, a1, a3, a7, &c, d, e, f, g, h, K, u, v, qk);
+        nextK_ak1(N, tFlag, *a, *b, *a1, a3, a7, K, qk, qp);
+        tFlag = calcSC_ak1(N, *a, *b, a1, a3, a7, &c, d, e, f, g, h, K, u, v, qk);
+        newest_ak1(tFlag, &ui, &vi, *a, *a1, *a3, *a7, *b, c, *d, *f, *g, *h, u, v, K, N, p);
+
+        // If vi is zero, the iteration is not converging
+        if (vi != 0){
+            relstp = fabs((-v + vi)/vi);
+            u = ui;
+            v = vi;
+        } // End if (vi != 0)
+    } while (vi != 0); // End do-while loop
+
+    return;
 
 } //End QuadIT_ak1
 
-void RealIT_ak1(int* iFlag, int* NZ, double* sss, int N, double p[MDP1], int NN, double qp[MDP1], double* szr, double* szi, double K[MDP1], double qk[MDP1]){
+template <typename Real>
+void RealIT_ak1(int* iFlag, int* NZ, Real* sss, int N, Real p[MDP1], int NN, Real qp[MDP1], Real* szr, Real* szi, Real K[MDP1], Real qk[MDP1]){
 
-// Variable-shift H-polynomial iteration for a real zero
+    // Variable-shift H-polynomial iteration for a real zero
 
-// sss - starting iterate
-// NZ - number of zeros found
-// iFlag - flag to indicate a pair of zeros near real axis
+    // sss - starting iterate
+    // NZ - number of zeros found
+    // iFlag - flag to indicate a pair of zeros near real axis
 
-int i, j = 0, nm1 = N - 1;
-double ee, kv, mp, ms, omp, pv, s, t;
+    int i, j = 0, nm1 = N - 1;
+    Real ee, kv, mp, ms, omp, pv, s, t;
 
-*iFlag = *NZ = 0;
-s = *sss;
+    *iFlag = *NZ = 0;
+    s = *sss;
 
-for ( ; ; ) {
-    qp[0] = pv = p[0];
+    for ( ; ; ) {
+        qp[0] = pv = p[0];
 
-    // Evaluate p at s
-    for (i = 1; i < NN; i++)   qp[i] = pv = pv*s + p[i];
+        // Evaluate p at s
+        for (i = 1; i < NN; i++)   qp[i] = pv = pv*s + p[i];
 
-    mp = fabs(pv);
+        mp = fabs(pv);
 
-    // Compute a rigorous bound on the error in evaluating p
+        // Compute a rigorous bound on the error in evaluating p
 
-    ms = fabs(s);
-    ee = 0.5*fabs(qp[0]);
-    for (i = 1; i < NN; i++)   ee = ee*ms + fabs(qp[i]);
+        ms = fabs(s);
+        ee = 0.5*fabs(qp[0]);
+        for (i = 1; i < NN; i++)   ee = ee*ms + fabs(qp[i]);
 
-    // Iteration has converged sufficiently if the polynomial value is less than
-    // 20 times this bound
+        // Iteration has converged sufficiently if the polynomial value is less than
+        // 20 times this bound
 
-    if (mp <= 20.0*DBL_EPSILON*(2.0*ee - mp)){
-        *NZ = 1;
-        *szr = s;
-        *szi = 0.0;
-        break;
-    } // End if (mp <= 20.0*DBL_EPSILON*(2.0*ee - mp))
-
-    j++;
-
-    // Stop iteration after 10 steps
-
-    if (j > 10)   break;
-
-    if (j >= 2){
-        if ((fabs(t) <= 0.001*fabs(-t + s)) && (mp > omp)){
-            // A cluster of zeros near the real axis has been encountered;
-            // Return with iFlag set to initiate a quadratic iteration
-
-            *iFlag = 1;
-            *sss = s;
+        if (mp <= 20.0*DBL_EPSILON*(2.0*ee - mp)){
+            *NZ = 1;
+            *szr = s;
+            *szi = 0.0;
             break;
-        } // End if ((fabs(t) <= 0.001*fabs(s - t)) && (mp > omp))
+        } // End if (mp <= 20.0*DBL_EPSILON*(2.0*ee - mp))
 
-    } //End if (j >= 2)
+        j++;
 
-    // Return if the polynomial value has increased significantly
+        // Stop iteration after 10 steps
 
-    omp = mp;
+        if (j > 10)   break;
 
-    // Compute t, the next polynomial and the new iterate
-    qk[0] = kv = K[0];
-    for (i = 1; i < N; i++)   qk[i] = kv = kv*s + K[i];
+        if (j >= 2){
+            if ((fabs(t) <= 0.001*fabs(-t + s)) && (mp > omp)){
+                // A cluster of zeros near the real axis has been encountered;
+                // Return with iFlag set to initiate a quadratic iteration
 
-    if (fabs(kv) > fabs(K[nm1])*10.0*DBL_EPSILON){
-        // Use the scaled form of the recurrence if the value of K at s is non-zero
-        t = -(pv/kv);
-        K[0] = qp[0];
-        for (i = 1; i < N; i++)   K[i] = t*qk[i - 1] + qp[i];
-    } // End if (fabs(kv) > fabs(K[nm1])*10.0*DBL_EPSILON)
-    else { // else (fabs(kv) <= fabs(K[nm1])*10.0*DBL_EPSILON)
-        // Use unscaled form
-        K[0] = 0.0;
-        for (i = 1; i < N; i++)   K[i] = qk[i - 1];
-    } // End else (fabs(kv) <= fabs(K[nm1])*10.0*DBL_EPSILON)
+                *iFlag = 1;
+                *sss = s;
+                break;
+            } // End if ((fabs(t) <= 0.001*fabs(s - t)) && (mp > omp))
 
-    kv = K[0];
-    for (i = 1; i < N; i++)   kv = kv*s + K[i];
+        } //End if (j >= 2)
 
-    t = ((fabs(kv) > (fabs(K[nm1])*10.0*DBL_EPSILON)) ? -(pv/kv) : 0.0);
+        // Return if the polynomial value has increased significantly
 
-    s += t;
+        omp = mp;
 
-} // End infinite for loop
+        // Compute t, the next polynomial and the new iterate
+        qk[0] = kv = K[0];
+        for (i = 1; i < N; i++)   qk[i] = kv = kv*s + K[i];
 
-return;
+        if (fabs(kv) > fabs(K[nm1])*10.0*DBL_EPSILON){
+            // Use the scaled form of the recurrence if the value of K at s is non-zero
+            t = -(pv/kv);
+            K[0] = qp[0];
+            for (i = 1; i < N; i++)   K[i] = t*qk[i - 1] + qp[i];
+        } // End if (fabs(kv) > fabs(K[nm1])*10.0*DBL_EPSILON)
+        else { // else (fabs(kv) <= fabs(K[nm1])*10.0*DBL_EPSILON)
+            // Use unscaled form
+            K[0] = 0.0;
+            for (i = 1; i < N; i++)   K[i] = qk[i - 1];
+        } // End else (fabs(kv) <= fabs(K[nm1])*10.0*DBL_EPSILON)
+
+        kv = K[0];
+        for (i = 1; i < N; i++)   kv = kv*s + K[i];
+
+        t = ((fabs(kv) > (fabs(K[nm1])*10.0*DBL_EPSILON)) ? -(pv/kv) : 0.0);
+
+        s += t;
+
+    } // End infinite for loop
+
+    return;
 
 } // End RealIT_ak1
 
-void Quad_ak1(double a, double b1, double c, double* sr, double* si, double* lr, double* li) {
-// Calculates the zeros of the quadratic a*Z^2 + b1*Z + c
-// The quadratic formula, modified to avoid overflow, is used to find the larger zero if the
-// zeros are real and both zeros are complex. The smaller real zero is found directly from
-// the product of the zeros c/a.
+template <typename Real>
+void Quad_ak1(Real a, Real b1, Real c, Real* sr, Real* si, Real* lr, Real* li) {
+    // Calculates the zeros of the quadratic a*Z^2 + b1*Z + c
+    // The quadratic formula, modified to avoid overflow, is used to find the larger zero if the
+    // zeros are real and both zeros are complex. The smaller real zero is found directly from
+    // the product of the zeros c/a.
 
-double b, d, e;
+    Real b, d, e;
 
-*sr = *si = *lr = *li = 0.0;
+    *sr = *si = *lr = *li = 0.0;
 
-if (a == 0) {
-    *sr = ((b1 != 0) ? -(c/b1) : *sr);
+    if (a == 0) {
+        *sr = ((b1 != 0) ? -(c/b1) : *sr);
+        return;
+    } // End if (a == 0))
+
+    if (c == 0){
+        *lr = -(b1/a);
+        return;
+    } // End if (c == 0)
+
+    // Compute discriminant avoiding overflow
+
+    b = b1/2.0;
+    if (fabs(b) < fabs(c)){
+        e = ((c >= 0) ? a : -a);
+        e = -e + b*(b/fabs(c));
+        d = sqrt(fabs(e))*sqrt(fabs(c));
+    } // End if (fabs(b) < fabs(c))
+    else { // Else (fabs(b) >= fabs(c))
+        e = -((a/b)*(c/b)) + 1.0;
+        d = sqrt(fabs(e))*(fabs(b));
+    } // End else (fabs(b) >= fabs(c))
+
+    if (e >= 0) {
+        // Real zeros
+
+        d = ((b >= 0) ? -d : d);
+        *lr = (-b + d)/a;
+        *sr = ((*lr != 0) ? (c/(*lr))/a : *sr);
+    } // End if (e >= 0)
+    else { // Else (e < 0)
+        // Complex conjugate zeros
+
+        *lr = *sr = -(b/a);
+        *si = fabs(d/a);
+        *li = -(*si);
+    } // End else (e < 0)
+
     return;
-} // End if (a == 0))
-
-if (c == 0){
-    *lr = -(b1/a);
-    return;
-} // End if (c == 0)
-
-// Compute discriminant avoiding overflow
-
-b = b1/2.0;
-if (fabs(b) < fabs(c)){
-    e = ((c >= 0) ? a : -a);
-    e = -e + b*(b/fabs(c));
-    d = sqrt(fabs(e))*sqrt(fabs(c));
-} // End if (fabs(b) < fabs(c))
-else { // Else (fabs(b) >= fabs(c))
-    e = -((a/b)*(c/b)) + 1.0;
-    d = sqrt(fabs(e))*(fabs(b));
-} // End else (fabs(b) >= fabs(c))
-
-if (e >= 0) {
-    // Real zeros
-
-    d = ((b >= 0) ? -d : d);
-    *lr = (-b + d)/a;
-    *sr = ((*lr != 0) ? (c/(*lr))/a : *sr);
-} // End if (e >= 0)
-else { // Else (e < 0)
-    // Complex conjugate zeros
-
-    *lr = *sr = -(b/a);
-    *si = fabs(d/a);
-    *li = -(*si);
-} // End else (e < 0)
-
-return;
 } // End Quad_ak1
 
 template <typename Vector>
@@ -856,24 +872,28 @@ try {
 	using namespace sw::universal;
     int nrOfFailedTestCases = 0;
 
-    double maxDiff {0};
-    for(int i = 0; i < 10000; ++i){
-        double op[MDP1], zeroi[MAXDEGREE], zeror[MAXDEGREE]; // Coefficient vectors
+    using Real = posit<64, 2>;
+    using Vector = sw::universal::blas::vector<Real>;
+    Real maxDiff {0};
+    for(int i = 0; i < 1000; ++i){
+        std::cout << i << '\n';
+        Real op[MDP1], zeroi[MAXDEGREE], zeror[MAXDEGREE]; // Coefficient vectors
 
-        using Real = double;
-        using Vector = sw::universal::blas::vector<Real>;
-
-        int degree = 2 + rand() % 15;
-        Vector roots;
+        int degree = 2 + rand() % 7;
+        std::vector<double> doubleRoots;
         for(int j = 0; j < degree; ++j){ 
             // rand -16 to 16
-            double r = 32 * (static_cast<double>(rand()) / static_cast<double>(RAND_MAX)); 
+            double r = 8 * (static_cast<double>(rand()) / static_cast<double>(RAND_MAX)); 
             if(rand() % 2 == 0){
                 r *= -1;
             }
-            roots.push_back(r); 
+            doubleRoots.push_back(r); 
         }
-        Vector poly = CreatePolynomialFromRoots(roots);
+        std::vector<double> doublePoly = CreatePolynomialFromRoots(doubleRoots);
+        Vector poly;
+        for(auto d : doublePoly){
+            poly.push_back(d); // implicitly cast to Real
+        }
 
         //Input the polynomial coefficients from the file and put them in the op vector
         for (int j = 0; j < (degree+1); ++j){
@@ -891,10 +911,10 @@ try {
         }
 
         std::sort(realRoots.begin(), realRoots.end());
-        std::sort(roots.begin(), roots.end());
+        std::sort(doubleRoots.begin(), doubleRoots.end());
 
         for (int j = 0; j < degree; ++j){
-            double diff = abs(realRoots[j] - roots[j]);
+            double diff = abs(static_cast<double>(realRoots[j]) - doubleRoots[j]);
             maxDiff = diff > maxDiff ? diff : maxDiff;
         }
     }
