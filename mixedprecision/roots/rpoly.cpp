@@ -13,9 +13,13 @@
 #include <iostream>
 #include <iomanip>
 // TEMP
+#include <cstdlib>
+#include <ctime>
 #include <memory>
+#include <format>
 #include <fstream>
 
+#include <algorithm>
 #include <complex>
 
 #include <universal/number/posit/posit.hpp>
@@ -70,6 +74,56 @@ enum ConvergenceType{
     LINEAR_CONVERGENCE = 1,
     QUADRATIC_CONVERGENCE = 2
 };
+
+using namespace sw::universal;
+template <size_t nbits, size_t es>
+class LoggingPosit : public posit<nbits, es> {
+public:
+    static std::vector<posit<nbits, es>> log;
+
+    // Default constructor for Vector (NOTE: chose not to log here, unsure if this is right choice)
+    LoggingPosit() : posit<nbits, es>() {};
+
+    // Copy constructor (operations in base class return posits)
+    LoggingPosit(const posit<nbits, es>& other) : posit<nbits, es>(other) {
+        if(*this != 0 && !isnar(*this)){
+            log.push_back(*this);
+        }
+    }
+   
+    // Constructor from double (I use stuff like Real val = Real(1.0) often where Real is a posit type)
+    LoggingPosit(double val) : posit<nbits, es>(val) {
+        if(*this != 0 && !isnar(*this)){
+            log.push_back(*this);
+        }
+    }
+   
+    // Only handling assignment operator here, but could also create ones for intermediate operators (like +, *)
+    LoggingPosit& operator=(const LoggingPosit& rhs) {
+        posit<nbits, es>::operator=(static_cast<const posit<nbits, es>&>(rhs));
+        if(*this != 0 && !isnar(*this)){
+            log.push_back(*this);
+        }
+        return *this;
+    }
+};
+template<size_t nbits, size_t es>
+std::vector<posit<nbits, es>> LoggingPosit<nbits, es>::log;
+
+// define a trait for logging posit types (modified from posit_trains.hpp)
+template<typename _Ty>
+struct is_logging_posit_trait
+	: false_type
+{
+};
+template<unsigned nbits, unsigned es>
+struct is_logging_posit_trait< LoggingPosit<nbits, es> >
+	: true_type
+{
+};
+
+template<typename _Ty>
+constexpr bool is_logging_posit = is_logging_posit_trait<_Ty>::value;
 
 // Evaluate the polynomial at x using the Horner scheme.
 template <typename Vector>
@@ -145,29 +199,31 @@ Vector MultiplyPolynomials(const Vector& poly1, const Vector& poly2) {
 
     Vector multiplied_poly = Vector(poly1.size() + poly2.size() - 1);
 
-    if constexpr (is_posit<Real>){
-        // Use version with quire
-        for(size_t k = 0; k < multiplied_poly.size(); ++k){
-            constexpr unsigned nbits = Real::nbits;
-            constexpr unsigned es = Real::es;
-            constexpr unsigned capacity = 20; // support vectors up to 1M elements
-            quire<nbits, es, capacity> q = 0;
+    // if constexpr (is_posit<Real> || is_logging_posit<Real>){
+    //     // Use version with quire
+    //     for(size_t k = 0; k < multiplied_poly.size(); ++k){
+    //         constexpr unsigned nbits = Real::nbits;
+    //         constexpr unsigned es = Real::es;
+    //         constexpr unsigned capacity = 20; // support vectors up to 1M elements
+    //         quire<nbits, es, capacity> q = 0;
 
-            for(size_t i = 0; i <= k; ++i){
-                if(i < poly1.size() && (k - i) < poly2.size()){
-                    q += quire_mul(poly1[i], poly2[k-i]);
-                }
-            }
-            convert(q.to_value(), multiplied_poly[k]);
-        }
-    }
-    else{
+    //         for(size_t i = 0; i <= k; ++i){
+    //             if(i < poly1.size() && (k - i) < poly2.size()){
+    //                 q += quire_mul(poly1[i], poly2[k-i]);
+    //             }
+    //         }
+    //         convert(q.to_value(), multiplied_poly[k]);
+    //         // TODO: temp just to assign val
+    //         Real t = multiplied_poly[k];
+    //     }
+    // }
+    // else{
         for (size_t i = 0; i < poly1.size(); ++i) {
             for (size_t j = 0; j < poly2.size(); ++j) {
                 multiplied_poly[i + j] += poly1[i] * poly2[j];
             }
         }
-    }
+    // }
 
     return multiplied_poly;
 }
@@ -287,7 +343,8 @@ void QuadraticSyntheticDivision(const Vector& polynomial,
 
     // If the quotient is a constant then polynomial is degree 2 and the math is simple.
     if (quotient.size() == 1) {
-        remainder = {polynomial[1] - polynomial[0] * quadratic_divisor[1], polynomial[2] - polynomial[0] * quadratic_divisor[2]};
+        remainder[0] = polynomial[polynomial.size() - 2] - polynomial[0] * quadratic_divisor[quadratic_divisor.size() - 2];
+        remainder[1] = polynomial[polynomial.size() - 1] - polynomial[0] * quadratic_divisor[quadratic_divisor.size() - 1];
         return; 
     }
 
@@ -343,7 +400,7 @@ class JenkinsTraubSolver {
 using Real = typename Vector::value_type; // TODO: check that this is right placement for this
 public:
     JenkinsTraubSolver(const Vector& coeffs, Vector& real_roots, Vector& complex_roots)
-        : polynomial_(coeffs), real_roots_(real_roots), complex_roots_(complex_roots), num_solved_roots_(0) 
+        : polynomial_(coeffs), real_roots_(real_roots), complex_roots_(complex_roots), num_solved_roots_(0), currentRecursionDepth(0) 
         { sigma_.resize(3); }
 
     // Extracts the roots using the Jenkins Traub method.
@@ -411,6 +468,10 @@ public:
             }
         }
         return SolveClosedFormPolynomial();
+    }
+
+    int GetNumSolvedRoots(){
+        return num_solved_roots_;
     }
 
 private:
@@ -602,11 +663,11 @@ private:
             const std::complex<Real> k_at_root = c_ - d_ * std::conj(root);
 
 
-            t_lambda[0] = t_lambda[t_lambda.size() - 2];
-            t_lambda[1] = t_lambda[t_lambda.size() - 1];
+            t_lambda[0] = t_lambda[1];
+            t_lambda[1] = t_lambda[2];
 
-            sigma_lambda[0] = sigma_lambda[sigma_lambda.size() - 2];
-            sigma_lambda[1] = sigma_lambda[sigma_lambda.size() - 1];
+            sigma_lambda[0] = sigma_lambda[1];
+            sigma_lambda[1] = sigma_lambda[2];
 
             t_lambda[2] = root - p_at_root / k_at_root;
             sigma_lambda[2] = variable_shift_sigma[2];
@@ -710,7 +771,8 @@ private:
         using std::abs;
 
         // Only proceed if we have not already tried a quadratic shift.
-        if (attempted_quadratic_shift_) {
+        ++currentRecursionDepth;
+        if (attempted_quadratic_shift_ || currentRecursionDepth >= kMaxRecursionDepth) {
             return false;
         }
 
@@ -809,7 +871,8 @@ private:
         using namespace sw::universal;
         using std::abs;
 
-        if (attempted_linear_shift_) {
+        ++currentRecursionDepth;
+        if (attempted_linear_shift_ || currentRecursionDepth >= kMaxRecursionDepth) {
             return false;
         }
 
@@ -991,44 +1054,18 @@ private:
     inline static const Real sum_eps = std::numeric_limits<Real>::epsilon();
     inline static const Real kAbsoluteTolerance = Real(1e-14); // from 1e-14
     inline static const Real kRelativeTolerance = Real(1e-10); // from 1e-10
+
+    // To prevent segfault on ApplyQuadraticShiftToKPolynomial and ApplyLinearShiftToKPolynomial
+    static const int kMaxRecursionDepth = 1000;
+    int currentRecursionDepth;
 };
 
 template <typename Vector>
-bool FindPolynomialRootsJenkinsTraub(const Vector& polynomial, Vector& real_roots, Vector& complex_roots) {
+int FindPolynomialRootsJenkinsTraub(const Vector& polynomial, Vector& real_roots, Vector& complex_roots) {
     JenkinsTraubSolver<Vector> solver(polynomial, real_roots, complex_roots);
-    return solver.ExtractRoots();
+    bool solved = solver.ExtractRoots();
+    return solved ? solver.GetNumSolvedRoots() : -1;
 }
-
-using namespace sw::universal;
-template <size_t nbits, size_t es>
-class LoggingPosit : public posit<nbits, es> {
-public:
-    static std::vector<posit<nbits, es>> log;
-    
-    // Default constructor for Vector (NOTE: chose not to log here, unsure if this is right choice)
-    LoggingPosit() : posit<nbits, es>() {};
-
-    // Copy constructor (operations in base class return posits)
-    LoggingPosit(const posit<nbits, es>& other) : posit<nbits, es>(other) {
-        log.push_back(*this);
-    }
-   
-    // Constructor from double (I use stuff like Real val = Real(1.0) often where Real is a posit type)
-    LoggingPosit(double val) : posit<nbits, es>(val) {
-        log.push_back(*this);
-    }
-   
-    // Only handling assignment operator here, but could also create ones for intermediate operators (like +, *)
-    LoggingPosit& operator=(const LoggingPosit& rhs) {
-        posit<nbits, es>::operator=(static_cast<const posit<nbits, es>&>(rhs));
-        log.push_back(*this);
-        return *this;
-    }
-};
-
-// Static member definition - needs full namespace qualification
-template<size_t nbits, size_t es>
-std::vector<posit<nbits, es>> LoggingPosit<nbits, es>::log;
 
 // cd build/mixedprecision/roots
 // make mp_rpoly
@@ -1036,48 +1073,298 @@ std::vector<posit<nbits, es>> LoggingPosit<nbits, es>::log;
 int main(int argc, char** argv) 
 try {
 	using namespace sw::universal;
+    srand(time(0));
 
 	//bool bReportIndividualTestCases = false;
 	int nrOfFailedTestCases = 0;
 
-    {
-        using Real = float;
-        using Vector = blas::vector<Real>;
+    std::vector<sw::universal::blas::vector<double>> failures;
+    int complexCount = 0;
+    for(int i = 0; i < 100000; ++i){
+        using Real = double;
+        using Vector = sw::universal::blas::vector<Real>;
 
-        Vector roots(5, 1);
-        for(size_t i = 0; i < roots.size(); i++){
-            roots[i] += (i % 2 == 1 ? -1 : 1) * Real(1 / pow(2, i+1)); 
-            if(i % 2 == 1) roots[i] *= -1;
+        int degree = 6;
+        sw::universal::blas::vector<double> roots;
+        for(int j = 0; j < degree; ++j){ 
+            // rand -16 to 16
+            double r = 16 * (static_cast<double>(rand()) / static_cast<double>(RAND_MAX)); 
+            if(rand() % 2 == 0){
+                r *= -1;
+            }
+            roots.push_back(r); 
         }
-        std::cout << "root: " << roots << '\n';
         Vector poly = CreatePolynomialFromRoots(roots);
-        std::cout << "poly: " << poly << '\n';
 
         Vector realRoots, complexRoots;
-
         FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
-        std::cout << "real: " << realRoots << '\n';
-        std::cout << "cplx: " << complexRoots << '\n';
-    }
-    {
-        using Real = posit<16, 2>;
-        using Vector = blas::vector<Real>;
-
-        Vector roots(5, 1);
-        for(size_t i = 0; i < roots.size(); i++){
-            roots[i] += (i % 2 == 1 ? -1 : 1) * Real(1 / pow(2, i+1)); 
-            if(i % 2 == 1) roots[i] *= -1;
+        
+        std::sort(roots.begin(), roots.end());
+        std::sort(realRoots.begin(), realRoots.end());
+        bool diff = false;
+        for(size_t j = 0; j < roots.size(); ++j){
+            if(abs(roots[j] - realRoots[j]) >= 1){
+                diff = true;
+            }
         }
-        std::cout << "root: " << roots << '\n';
-        Vector poly = CreatePolynomialFromRoots(roots);
-        std::cout << "poly: " << poly << '\n';
-
-        Vector realRoots, complexRoots;
-
-        FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
-        std::cout << "real: " << realRoots << '\n';
-        std::cout << "cplx: " << complexRoots << '\n';
+        if(diff){
+            failures.push_back(poly);
+            bool complex = false;
+            for(auto c : complexRoots){
+                if(c != 0){
+                    complex = true;
+                }
+            }
+            if(complex){
+                complexCount += 1;
+            }
+        }
     }
+    std::cout << complexCount << '\n';
+    std::cout << failures.size() << '\n';
+    // int failCount = -1;
+    // for(int i = 0; i < 10; ++i){
+    //     std::vector<sw::universal::blas::vector<double>> failures2;
+    //     for(auto poly : failures){
+    //         using Real = double;
+    //         using Vector = sw::universal::blas::vector<Real>;
+
+    //         Vector realRoots, complexRoots;
+    //         FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
+            
+    //         std::sort(poly.begin(), poly.end());
+    //         std::sort(realRoots.begin(), realRoots.end());
+    //         bool diff = false;
+    //         for(size_t j = 0; j < poly.size(); ++j){
+    //             // std::cout << abs(failure[j] - realRoots[j]) << '\n';
+    //             if(abs(poly[j] - realRoots[j]) >= 1){
+    //                 diff = true;
+    //             }
+    //         }
+    //         if(diff){
+    //             failures2.push_back(poly);
+    //             // std::cout << failure << '\n';
+    //             // std::cout << realRoots << '\n';
+    //         }
+    //     }
+    //     if(failCount == -1){
+    //         std::cout << failures2.size() << '\n';
+    //         failCount = failures2.size();
+    //     }
+    //     else if(failCount != failures2.size()){
+    //         std::cout << "Changed\n";
+    //     }
+    // }   
+    
+    
+    
+    
+    // {
+    //     using Real = double;
+    //     using Vector = sw::universal::blas::vector<Real>;
+
+    //     Vector roots = { -15.5822, -11.1035, -9.03839, -7.14378, -5.38557, -2.84916, 0.293871, 11.3624 };
+    //     Vector poly = CreatePolynomialFromRoots(roots);
+
+    //     Vector realRoots, complexRoots;
+    //     FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
+        
+    //     std::sort(roots.begin(), roots.end());
+    //     std::sort(realRoots.begin(), realRoots.end());
+    //     std::cout << roots << '\n';
+    //     std::cout << realRoots << '\n';
+    // }
+
+    // { 
+    //     std::ofstream file("data.csv");
+    //     file << "minVal,maxVal,better\n";
+
+    //     // When you see any result check any within close range of testing
+    //     // Test within local regions of each test
+    //     srand(time(0));
+    //     int i {0};
+    //     int failuresDouble {0};
+    //     int failuresPosit {0};
+    //     int failuresFloat {0};
+    //     double maxDoubleSqrDiff {0};
+    //     double maxPositSqrDiff {0};
+    //     double maxFloatSqrDiff {0};
+    //     while(i < 1000){
+    //         int degree = 2 + rand() % 7; // degree 2-8
+    //         sw::universal::blas::vector<double> randRoots;
+    //         for(int j = 0; j < degree; ++j){ 
+    //             // rand -16 to 16
+    //             double r = 16 * (static_cast<double>(rand()) / static_cast<double>(RAND_MAX)); 
+    //             if(rand() % 2 == 0){
+    //                 r *= -1;
+    //             }
+    //             randRoots.push_back(r); 
+    //         }
+            
+    //         sw::universal::blas::vector<double> randPoly = CreatePolynomialFromRoots(randRoots);
+    //         int numSolvedRoots1 = 0;
+    //         double squaredDiff1 = 0;
+    //         int numSolvedRoots2 = 0;
+    //         double squaredDiff2 = 0;
+
+    //         {
+    //             using Real = double;
+    //             using Vector = sw::universal::blas::vector<Real>;
+
+    //             Vector poly;
+    //             for(auto val : randPoly){
+    //                 poly.push_back(val);
+    //             }
+    //             Vector realRoots, complexRoots;
+    //             numSolvedRoots2 = FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
+                
+    //             std::sort(randRoots.begin(), randRoots.end());
+    //             std::sort(realRoots.begin(), realRoots.end());
+
+    //             for(size_t i = 0; i < randRoots.size(); ++i){
+    //                 if(numSolvedRoots2 != -1){
+    //                     double sqrDiff = (randRoots[i] - static_cast<double>(realRoots[i])) * (randRoots[i] - static_cast<double>(realRoots[i]));
+    //                     if(sqrDiff > 1){
+    //                         std::cout << realRoots << '\n';
+    //                         std::cout << randRoots << '\n';
+    //                     }
+    //                     maxDoubleSqrDiff = sqrDiff > maxDoubleSqrDiff ? sqrDiff : maxDoubleSqrDiff;
+    //                 }
+    //             }
+    //         }
+    //         // {
+    //         //     using Real = LoggingPosit<32, 2>;
+    //         //     Real::log.clear();
+    //         //     using Vector = std::vector<Real>;
+
+    //         //     Vector poly;
+    //         //     for(auto val : randPoly){
+    //         //         poly.push_back(val);
+    //         //     }
+    //         //     Vector realRoots, complexRoots;
+    //         //     numSolvedRoots1 = FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
+    //         //     if(numSolvedRoots1 == -1){
+    //         //         failuresPosit += 1;
+    //         //     }
+
+    //         //     std::sort(randRoots.begin(), randRoots.end());
+    //         //     std::sort(realRoots.begin(), realRoots.end());
+
+    //         //     for(size_t i = 0; i < randRoots.size(); ++i){
+    //         //         double sqrDiff = (randRoots[i] - static_cast<double>(realRoots[i])) * (randRoots[i] - static_cast<double>(realRoots[i]));
+    //         //         if(numSolvedRoots1 != -1){
+    //         //             maxPositSqrDiff = sqrDiff > maxPositSqrDiff ? sqrDiff : maxPositSqrDiff;
+    //         //             squaredDiff1 += sqrDiff;
+    //         //         } 
+    //         //     }
+    //         //     for(size_t i = 0; i < Real::log.size(); ++i){
+    //         //         Real::log[i] = abs(Real::log[i]);
+    //         //     }
+    //         // }
+    //         // {
+    //         //     using Real = float;
+    //         //     using Vector = sw::universal::blas::vector<Real>;
+
+    //         //     Vector poly;
+    //         //     for(auto val : randPoly){
+    //         //         poly.push_back(val);
+    //         //     }
+    //         //     Vector realRoots, complexRoots;
+                
+    //         //     numSolvedRoots2 = FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
+    //         //     if(numSolvedRoots2 == -1){
+    //         //         failuresFloat += 1;
+    //         //     }
+
+    //         //     std::sort(randRoots.begin(), randRoots.end());
+    //         //     std::sort(realRoots.begin(), realRoots.end());
+
+    //         //     for(size_t i = 0; i < randRoots.size(); ++i){
+    //         //         squaredDiff2 += (randRoots[i] - static_cast<double>(realRoots[i])) * (randRoots[i] - static_cast<double>(realRoots[i]));
+    //         //         if(numSolvedRoots2 != -1){
+    //         //             double sqrDiff = (randRoots[i] - static_cast<double>(realRoots[i])) * (randRoots[i] - static_cast<double>(realRoots[i]));
+    //         //             // if(sqrDiff > 1){
+    //         //             //     std::cout << realRoots << '\n';
+    //         //             //     std::cout << randRoots << '\n';
+    //         //             // }
+    //         //             maxFloatSqrDiff = sqrDiff > maxFloatSqrDiff ? sqrDiff : maxFloatSqrDiff;
+    //         //         }
+    //         //     }
+    //         // }
+
+    //         // auto minElem = *std::min_element(LoggingPosit<32, 2>::log.begin(), LoggingPosit<32, 2>::log.end());
+    //         // auto maxElem = *std::max_element(LoggingPosit<32, 2>::log.begin(), LoggingPosit<32, 2>::log.end());
+    //         // if(numSolvedRoots1 != -1 || numSolvedRoots2 != -1){
+    //         //     if(numSolvedRoots1 != 1 && numSolvedRoots2 == -1){
+    //         //     file << std::format("{},{},{}\n", to_string(minElem), to_string(maxElem), 2); // 2 = posit converged (and float did not)
+    //         //     }
+    //         //     else if(numSolvedRoots2 > numSolvedRoots1){
+    //         //         file << std::format("{},{},{}\n", to_string(minElem), to_string(maxElem), -2); // -2 = float converged (and posit did not)
+    //         //     }
+    //         //     else{
+    //         //         if(squaredDiff1 < squaredDiff2){
+    //         //             file << std::format("{},{},{}\n", to_string(minElem), to_string(maxElem), 1); // 1 = posit was more precise (both converged)
+    //         //         }
+    //         //         else if(squaredDiff1 == squaredDiff2){
+    //         //             file << std::format("{},{},{}\n", to_string(minElem), to_string(maxElem), -1); // -1 = float was more precise (both converged)
+    //         //         }
+    //         //         else{
+    //         //             file << std::format("{},{},{}\n", to_string(minElem), to_string(maxElem), 0); // 0 = both equal (both converged)
+    //         //         }
+    //         //     } 
+
+    //         //     // NOTE: this is inside the condition that one of the two converged
+    //         // }
+    //         ++i;
+    //     }
+    //     // std::cout << "Double: " << failuresDouble << '\n';
+    //     // std::cout << "Posit: " << failuresPosit << '\n';
+    //     // std::cout << "sqr diff: " << maxPositSqrDiff << '\n';
+    //     // std::cout << "Float: " << failuresFloat << '\n';
+    //     // std::cout << "sqr diff: " << maxFloatSqrDiff << '\n';
+    //     // std::cout << "Double max sqr diff: " << maxDoubleSqrDiff << '\n';
+    // }
+
+    
+
+    // {
+    //     using Real = float;
+    //     using Vector = blas::vector<Real>;
+
+    //     Vector roots(5, 1);
+    //     for(size_t i = 0; i < roots.size(); i++){
+    //         roots[i] += (i % 2 == 1 ? -1 : 1) * Real(1 / pow(2, i+1)); 
+    //         if(i % 2 == 1) roots[i] *= -1;
+    //     }
+    //     std::cout << "root: " << roots << '\n';
+    //     Vector poly = CreatePolynomialFromRoots(roots);
+    //     std::cout << "poly: " << poly << '\n';
+
+    //     Vector realRoots, complexRoots;
+
+    //     FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
+    //     std::cout << "real: " << realRoots << '\n';
+    //     std::cout << "cplx: " << complexRoots << '\n';
+    // }
+    // {
+    //     using Real = posit<16, 2>;
+    //     using Vector = blas::vector<Real>;
+
+    //     Vector roots(5, 1);
+    //     for(size_t i = 0; i < roots.size(); i++){
+    //         roots[i] += (i % 2 == 1 ? -1 : 1) * Real(1 / pow(2, i+1)); 
+    //         if(i % 2 == 1) roots[i] *= -1;
+    //     }
+    //     std::cout << "root: " << roots << '\n';
+    //     Vector poly = CreatePolynomialFromRoots(roots);
+    //     std::cout << "poly: " << poly << '\n';
+
+    //     Vector realRoots, complexRoots;
+
+    //     FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
+    //     std::cout << "real: " << realRoots << '\n';
+    //     std::cout << "cplx: " << complexRoots << '\n';
+    // }
     // {
     //     using Real = LoggingPosit<32, 2>;
     //     using Vector = blas::vector<Real>;
@@ -1101,113 +1388,9 @@ try {
 
     // }
     // {
-    //     const int nbits = 16;
-    //     using Real = LoggingPosit<nbits, 2>;
-    //     using Vector = blas::vector<Real>;
-
-    //     Vector roots = {1, 1, 1, 1};
-    //     double mod = 1e-5;
-    //     for(size_t i = 0; i < roots.size(); i++){
-    //         roots[i] += i * Real(mod * pow(2, 2 * i));
-    //         if(i % 2 == 1) roots[i] *= -1;
-    //     }
-    //     std::cout << "root: " << roots << '\n';
-    //     Vector poly = CreatePolynomialFromRoots(roots);
-    //     std::cout << "poly: " << poly << '\n';
-
-    //     Vector realRoots, complexRoots;
-
-    //     FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
-    //     std::cout << "real: " << realRoots << '\n';
-    //     std::cout << "cplx: " << complexRoots << '\n';
-
-    //     std::vector<posit<nbits, 2>>& log = Real::log;
-    //     std::cout << "min: " << *std::min_element(log.begin(), log.end()) << ", max: " << *std::max_element(log.begin(), log.end()) << '\n';
-        
-    // }
-    // {
-    //     using Real = LoggingPosit<16, 2>;
-
-    //     Real a = Real(1.0);
-    //     Real b = Real(1 - 1e-3);
-    //     Real c = a - b;
-    //     Real d = c + b; 
-
-    //     std::cout << to_binary(a) << ' ' << to_binary(b) << '\n';
-    //     std::cout << to_binary(c) << ' ' << to_binary(d) << '\n';
-
-    //     std::vector<posit<16, 2>> log = Real::log;
-    //     std::cout << "min: " << *std::min_element(log.begin(), log.end()) << ", max: " << *std::max_element(log.begin(), log.end()) << '\n';
-    // }
-    // {
     //     constexpr bool hasSubnormal = true;
     //     constexpr bool hasSupernormal = true;
     //     constexpr bool isSaturating = false;
-    //     // Just chose arbitrary 'nbits' and 'es' to show soft-float
-    //     using Real = cfloat<32, 4, std::uint16_t, hasSubnormal, hasSupernormal, isSaturating>;
-
-    //     Real a = Real(-512);
-    //     Real b = Real(512);
-    //     Real c = a * b;
-
-    //     std::cout << a << ' ' << b << '\n';
-    // }
-    // { 
-    //     // compare at each step to an oracle (after divided by smallest root)
-    //     // specifically compare coefficients between them
-    //     // irrational roots, phi, e, pi (test each of those) universal/applications/precision/constants
-
-    //     // constexpr bool hasSubnormal = true;
-    //     // constexpr bool hasSupernormal = true;
-    //     // constexpr bool isSaturating = false;
-    //     // // Just chose arbitrary 'nbits' and 'es' to show soft-float
-    //     // using Real = cfloat<38, 10, std::uint16_t, hasSubnormal, hasSupernormal, isSaturating>;
-    //     using Real = posit<38, 2>;
-    //     using Vector = sw::universal::blas::vector<Real>;
-
-    //     Vector roots = {0.25, 0.5, 0.75, 1, 1.5, 2};
-    //     // PrintBin(roots);
-    //     for (size_t i = 0; i < roots.size(); ++i){
-    //         roots[i] += Real(1) / Real(1024);
-    //     }
-    //     Print(roots);
-    //     // PrintBin(roots);
-
-    //     Vector poly = CreatePolynomialFromRoots(roots);
-    //     // Print(poly);
-
-    //     Vector realRoots, complexRoots;
-
-    //     FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
-    //     Print(realRoots);
-    //     // PrintBin(realRoots);
-    //     Print(complexRoots);
-    //     Real sum = 0;
-    //     for (size_t i = 0; i < realRoots.size(); ++i){
-    //         std::cout << abs(realRoots[i] - roots[i]) << ' ';
-    //         sum += abs(realRoots[i] - roots[i]);
-    //     }
-    //     std::cout << '\n' << sum << '\n';
-
-    //     // SUMS OF DIFFS
-    //     // 64-bit double: 1.18235e-11
-    //     // posit <64, 3>: 1.10315e-11
-
-    //     // cfloat<38, 10>: 3.99724e-06
-    //     // posit<38, 2>: 1.35915e-08
-        
-    //     // 32-bit float: fails to converge
-    //     // posit<32, 2>: 1.85706e-06
-        
-    //     // posit<16, 2>: 0.290039
-        
-    //     // posit<8, 2>: fails to converge
-    // }
-    // {
-    //     constexpr bool hasSubnormal = true;
-    //     constexpr bool hasSupernormal = true;
-    //     constexpr bool isSaturating = false;
-    //     // Just chose arbitrary 'nbits' and 'es' to show soft-float
     //     using Real = cfloat<28, 10, std::uint16_t, hasSubnormal, hasSupernormal, isSaturating>;
     //     using Vector = blas::vector<Real>;
 
