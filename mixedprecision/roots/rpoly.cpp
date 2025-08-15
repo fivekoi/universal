@@ -27,170 +27,780 @@
 
 #include <universal/blas/blas.hpp>
 
-// TEMP
-template <typename Vector>
-void Print(const Vector& vector){
-    for (auto v : vector){
-        std::cout << v << ' ';
-    }
-    std::cout << '\n';
-}
-// TEMP
-template <typename Vector>
-void PrintBin(const Vector& vector){
-    for (auto v : vector){
-        std::cout << to_binary(v) << ' ';
-    }
-    std::cout << '\n';
-}
+// rpoly_ak1.cpp - Program for calculating the roots of a polynomial of real coefficients.
+// Written in Microsoft Visual Studio Express 2013 for Windows Desktop
+// 27 May 2014
+//
+// The sub-routines listed below are translations of the FORTRAN routines included in RPOLY.FOR,
+// posted off the NETLIB site as TOMS/493:
+//
+// http://www.netlib.org/toms/493
+//
+// TOMS/493 is based on the Jenkins-Traub algorithm.
+//
+// To distinguish the routines posted below from others, an _ak1 suffix has been appended to them.
 
-template <typename Vector>
-Vector Head(const Vector& vector, size_t size){
-    Vector head(size);
-    for (size_t i = 0; i < size && i < vector.size(); ++i){
-        head[i] = vector[i];
-    }
+#include <iostream>
+#include <fstream>
+#include <cctype>
+#include <cmath>
+#include <cfloat>
 
-    return head;
-}
+using namespace std;
 
-template <typename Vector>
-Vector Tail(const Vector& vector, size_t size){
-    Vector tail(size);
-    size_t startIdx = vector.size() - size > 0 ? vector.size() - size : 0;
-    for (size_t i = startIdx; i < vector.size(); ++i){
-        tail[i] = vector[i - startIdx];
-    }
+#define MAXDEGREE 100
+#define MDP1 MAXDEGREE+1
 
-    return tail;
-}
+void rpoly_ak1(double op[MDP1], int* Degree, double zeror[MAXDEGREE], double zeroi[MAXDEGREE]);
+void Fxshfr_ak1(int L2, int* NZ, double sr, double bnd, double K[MDP1], int N, double p[MDP1], int NN, double qp[MDP1], double* lzi, double* lzr, double* szi, double* szr);
+void QuadSD_ak1(int NN, double u, double v, double p[MDP1], double q[MDP1], double* a, double* b);
+int calcSC_ak1(int N, double a, double b, double* a1, double* a3, double* a7, double* c, double* d, double* e, double* f, double* g, double* h, double K[MDP1], double u, double v, double qk[MDP1]);
+void nextK_ak1(int N, int tFlag, double a, double b, double a1, double* a3, double* a7, double K[MDP1], double qk[MDP1], double qp[MDP1]);
+void newest_ak1(int tFlag, double* uu, double* vv, double a, double a1, double a3, double a7, double b, double c, double d, double f, double g, double h, double u, double v, double K[MDP1], int N, double p[MDP1]);
+void QuadIT_ak1(int N, int* NZ, double uu, double vv, double* szr, double* szi, double* lzr, double* lzi, double qp[MDP1], int NN, double* a, double* b, double p[MDP1], double qk[MDP1], double* a1, double* a3, double* a7, double* d, double* e, double* f, double* g, double* h, double K[MDP1]);
+void RealIT_ak1(int* iFlag, int* NZ, double* sss, int N, double p[MDP1], int NN, double qp[MDP1], double* szr, double* szi, double K[MDP1], double qk[MDP1]);
+void Quad_ak1(double a, double b1, double c, double* sr, double* si, double* lr, double* li);
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846264338327950288
-#endif
+void rpoly_ak1(double op[MDP1], int* Degree, double zeror[MAXDEGREE], double zeroi[MAXDEGREE]){
 
-enum ConvergenceType{
-    NO_CONVERGENCE = 0,
-    LINEAR_CONVERGENCE = 1,
-    QUADRATIC_CONVERGENCE = 2
-};
+    int i, j, jj, l, N, NM1, NN, NZ, zerok;
 
-using namespace sw::universal;
-template <size_t nbits, size_t es>
-class LoggingPosit : public posit<nbits, es> {
-public:
-    static std::vector<posit<nbits, es>> log;
+    double K[MDP1], p[MDP1], pt[MDP1], qp[MDP1], temp[MDP1];
+    double bnd, df, dx, factor, ff, moduli_max, moduli_min, sc, x, xm;
+    double aa, bb, cc, lzi, lzr, sr, szi, szr, t, xx, xxx, yy;
 
-    // Default constructor for Vector (NOTE: chose not to log here, unsure if this is right choice)
-    LoggingPosit() : posit<nbits, es>() {};
+    const double RADFAC = 3.14159265358979323846/180; // Degrees-to-radians conversion factor = pi/180
+    const double lb2 = log(2.0); // Dummy variable to avoid re-calculating this value in loop below
+    const double lo = FLT_MIN/DBL_EPSILON;
+    const double cosr = cos(94.0*RADFAC); // = -0.069756474
+    const double sinr = sin(94.0*RADFAC); // = 0.99756405
 
-    // Copy constructor (operations in base class return posits)
-    LoggingPosit(const posit<nbits, es>& other) : posit<nbits, es>(other) {
-        if(*this != 0 && !isnar(*this)){
-            log.push_back(*this);
-        }
-    }
-   
-    // Constructor from double (I use stuff like Real val = Real(1.0) often where Real is a posit type)
-    LoggingPosit(double val) : posit<nbits, es>(val) {
-        if(*this != 0 && !isnar(*this)){
-            log.push_back(*this);
-        }
-    }
-   
-    // Only handling assignment operator here, but could also create ones for intermediate operators (like +, *)
-    LoggingPosit& operator=(const LoggingPosit& rhs) {
-        posit<nbits, es>::operator=(static_cast<const posit<nbits, es>&>(rhs));
-        if(*this != 0 && !isnar(*this)){
-            log.push_back(*this);
-        }
-        return *this;
-    }
-};
-template<size_t nbits, size_t es>
-std::vector<posit<nbits, es>> LoggingPosit<nbits, es>::log;
+    if ((*Degree) > MAXDEGREE){
+        cout << "\nThe entered Degree is greater than MAXDEGREE. Exiting rpoly. No further action taken.\n";
+        *Degree = -1;
+        return;
+    } // End ((*Degree) > MAXDEGREE)
 
-// define a trait for logging posit types (modified from posit_trains.hpp)
-template<typename _Ty>
-struct is_logging_posit_trait
-	: false_type
-{
-};
-template<unsigned nbits, unsigned es>
-struct is_logging_posit_trait< LoggingPosit<nbits, es> >
-	: true_type
-{
-};
+    //Do a quick check to see if leading coefficient is 0
+    if (op[0] != 0){
 
-template<typename _Ty>
-constexpr bool is_logging_posit = is_logging_posit_trait<_Ty>::value;
+    N = *Degree;
+    xx = sqrt(0.5); // = 0.70710678
+    yy = -xx;
 
-// Evaluate the polynomial at x using the Horner scheme.
-template <typename Vector>
-inline typename Vector::value_type EvaluatePolynomial(const Vector& polynomial, const typename Vector::value_type& x) {
-    using namespace sw::universal;
-    using Real = typename Vector::value_type;
+    // Remove zeros at the origin, if any
+    j = 0;
+    while (op[N] == 0){
+        zeror[j] = zeroi[j] = 0.0;
+        N--;
+        j++;
+    } // End while (op[N] == 0)
 
-    Real v = 0.0;
-    // if constexpr (is_posit<Real>){
-    //     constexpr unsigned nbits = Real::nbits;
-    //     constexpr unsigned es = Real::es;
-    //     constexpr unsigned capacity = 20; // support vectors up to 1M elements
-    //     quire<nbits, es, capacity> q = 0;
+    NN = N + 1;
 
-    //     for (size_t i = 0; i < polynomial.size(); ++i){
-    //         q *= x;
-    //         q += polynomial[i];
-    //     }
-    //     convert(q.to_value(), v);
-    // }
-    // else{
-        for (size_t i = 0; i < polynomial.size(); ++i) {
-            v = v * x + polynomial[i];
-        }
-    // }
-    
-    return v;
-}
-// Evaluate the polynomial at complex x using the Horner scheme.
-// TODO: not sure this can use the quire...? 
-template <typename Vector>
-inline std::complex<typename Vector::value_type> EvaluateComplexPolynomial(const Vector& polynomial, const std::complex<typename Vector::value_type>& x) {
-    std::complex<typename Vector::value_type> v; // Should default to 0 + 0i
-    for (size_t i = 0; i < polynomial.size(); ++i) {
-        v = v * x + polynomial[i];
-    }
-    return v;
-}
+    // Make a copy of the coefficients
+    for (i = 0; i < NN; i++)   p[i] = op[i];
 
-// Remove leading terms with zero coefficients.
-template <typename Vector>
-Vector RemoveLeadingZeros(const Vector& polynomial_in) {
-  size_t i = 0;
-  while (i < (polynomial_in.size() - 1) && polynomial_in[i] == typename Vector::value_type(0.0)) {
-    ++i;
-  }
-  return Tail(polynomial_in, polynomial_in.size() - i);
-}
+    while (N >= 1){ // Main loop
+        // Start the algorithm for one zero
+        if (N <= 2){
+        // Calculate the final zero or pair of zeros
+            if (N < 2){
+                zeror[(*Degree) - 1] = -(p[1]/p[0]);
+                zeroi[(*Degree) - 1] = 0.0;
+            } // End if (N < 2)
+            else { // else N == 2
+                Quad_ak1(p[0], p[1], p[2], &zeror[(*Degree) - 2], &zeroi[(*Degree) - 2], &zeror[(*Degree) - 1], &zeroi[(*Degree) - 1]);
+            } // End else N == 2
+            break;
+        } // End if (N <= 2)
 
-template <typename Vector>
-Vector DifferentiatePolynomial(const Vector& polynomial) {
-    const int degree = polynomial.size() - 1;
+        // Find the largest and smallest moduli of the coefficients
 
-    // Degree zero polynomials are constants, and their derivative does
-    // not result in a smaller degree polynomial, just a degree zero
-    // polynomial with value zero.
-    if (degree == 0) {
-        return Vector(1); // defaults to zero vector
-    }
+        moduli_max = 0.0;
+        moduli_min = FLT_MAX;
 
-    Vector derivative(degree);
-    for (int i = 0; i < degree; ++i) {
-        derivative[i] = (degree - i) * polynomial[i];
-    }
+        for (i = 0; i < NN; i++){
+            x = fabs(p[i]);
+            if (x > moduli_max)   moduli_max = x;
+            if ((x != 0) && (x < moduli_min))   moduli_min = x;
+        } // End for i
 
-    return derivative;
-}
+        // Scale if there are large or very small coefficients
+        // Computes a scale factor to multiply the coefficients of the polynomial. The scaling
+        // is done to avoid overflow and to avoid undetected underflow interfering with the
+        // convergence criterion.
+        // The factor is a power of the base.
+
+        sc = lo/moduli_min;
+
+        if (((sc <= 1.0) && (moduli_max >= 10)) || ((sc > 1.0) && (FLT_MAX/sc >= moduli_max))){
+            sc = ((sc == 0) ? FLT_MIN : sc);
+            l = (int)(log(sc)/lb2 + 0.5);
+            factor = pow(2.0, l);
+            if (factor != 1.0){
+                for (i = 0; i < NN; i++)   p[i] *= factor;
+            } // End if (factor != 1.0)
+        } // End if (((sc <= 1.0) && (moduli_max >= 10)) || ((sc > 1.0) && (FLT_MAX/sc >= moduli_max)))
+
+        // Compute lower bound on moduli of zeros
+
+        for (i = 0; i < NN; i++)   pt[i] = fabs(p[i]);
+        pt[N] = -(pt[N]);
+
+        NM1 = N - 1;
+
+        // Compute upper estimate of bound
+
+        x = exp((log(-pt[N]) - log(pt[0]))/(double)N);
+
+        if (pt[NM1] != 0) {
+            // If Newton step at the origin is better, use it
+            xm = -pt[N]/pt[NM1];
+            x = ((xm < x) ? xm : x);
+        } // End if (pt[NM1] != 0)
+
+        // Chop the interval (0, x) until ff <= 0
+
+        xm = x;
+        do {
+            x = xm;
+            xm = 0.1*x;
+            ff = pt[0];
+            for (i = 1; i < NN; i++)   ff = ff *xm + pt[i];
+        } while (ff > 0); // End do-while loop
+
+        dx = x;
+
+        // Do Newton iteration until x converges to two decimal places
+
+        while (fabs(dx/x) > 0.005) {
+            df = ff = pt[0];
+            for (i = 1; i < N; i++){
+                ff = x*ff + pt[i];
+                df = x*df + ff;
+            } // End for i
+            ff = x*ff + pt[N];
+            dx = ff/df;
+            x -= dx;
+        } // End while loop
+
+        bnd = x;
+
+        // Compute the derivative as the initial K polynomial and do 5 steps with no shift
+
+        for (i = 1; i < N; i++)   K[i] = (double)(N - i)*p[i]/((double)N);
+        K[0] = p[0];
+
+        aa = p[N];
+        bb = p[NM1];
+        zerok = ((K[NM1] == 0) ? 1 : 0);
+
+        for (jj = 0; jj < 5; jj++) {
+            cc = K[NM1];
+            if (zerok){
+                // Use unscaled form of recurrence
+                for (i = 0; i < NM1; i++){
+                    j = NM1 - i;
+                    K[j] = K[j - 1];
+                } // End for i
+                K[0] = 0;
+            zerok = ((K[NM1] == 0) ? 1 : 0);
+            } // End if (zerok)
+
+            else { // else !zerok
+                // Used scaled form of recurrence if value of K at 0 is nonzero
+                t = -aa/cc;
+                for (i = 0; i < NM1; i++){
+                    j = NM1 - i;
+                    K[j] = t*K[j - 1] + p[j];
+                } // End for i
+                K[0] = p[0];
+                zerok = ((fabs(K[NM1]) <= fabs(bb)*DBL_EPSILON*10.0) ? 1 : 0);
+            } // End else !zerok
+
+        } // End for jj
+
+        // Save K for restarts with new shifts
+        for (i = 0; i < N; i++)   temp[i] = K[i];
+
+        // Loop to select the quadratic corresponding to each new shift
+
+        for (jj = 1; jj <= 20; jj++){
+
+            // Quadratic corresponds to a double shift to a non-real point and its
+            // complex conjugate. The point has modulus BND and amplitude rotated
+            // by 94 degrees from the previous shift.
+
+            xxx = -(sinr*yy) + cosr*xx;
+            yy = sinr*xx + cosr*yy;
+            xx = xxx;
+            sr = bnd*xx;
+
+            // Second stage calculation, fixed quadratic
+
+            Fxshfr_ak1(20*jj, &NZ, sr, bnd, K, N, p, NN, qp, &lzi, &lzr, &szi, &szr);
+
+            if (NZ != 0){
+
+                // The second stage jumps directly to one of the third stage iterations and
+                // returns here if successful. Deflate the polynomial, store the zero or
+                // zeros, and return to the main algorithm.
+
+                j = (*Degree) - N;
+                zeror[j] = szr;
+                zeroi[j] = szi;
+                NN = NN - NZ;
+                N = NN - 1;
+                for (i = 0; i < NN; i++)   p[i] = qp[i];
+                if (NZ != 1){
+                    zeror[j + 1] = lzr;
+                    zeroi[j + 1] = lzi;
+                } // End if (NZ != 1)
+                break;
+            } // End if (NZ != 0)
+            else { // Else (NZ == 0)
+
+                // If the iteration is unsuccessful, another quadratic is chosen after restoring K
+                for (i = 0; i < N; i++)   K[i] = temp[i];
+            } // End else (NZ == 0)
+
+        } // End for jj
+
+        // Return with failure if no convergence with 20 shifts
+
+        if (jj > 20) {
+            cout << "\nFailure. No convergence after 20 shifts. Program terminated.\n";
+            *Degree -= N;
+            break;
+        } // End if (jj > 20)
+
+    } // End while (N >= 1)
+
+    } // End if op[0] != 0
+    else { // else op[0] == 0
+        cout << "\nThe leading coefficient is zero. No further action taken. Program terminated.\n";
+        *Degree = 0;
+    } // End else op[0] == 0
+
+    return;
+} // End rpoly_ak1
+
+void Fxshfr_ak1(int L2, int* NZ, double sr, double bnd, double K[MDP1], int N, double p[MDP1], int NN, double qp[MDP1], double* lzi, double* lzr, double* szi, double* szr){
+
+// Computes up to L2 fixed shift K-polynomials, testing for convergence in the linear or
+// quadratic case. Initiates one of the variable shift iterations and returns with the
+// number of zeros found.
+
+// L2 limit of fixed shift steps
+// NZ number of zeros found
+
+int fflag, i, iFlag, j, spass, stry, tFlag, vpass, vtry;
+double a, a1, a3, a7, b, betas, betav, c, d, e, f, g, h, oss, ots, otv, ovv, s, ss, ts, tss, tv, tvv, u, ui, v, vi, vv;
+double qk[MDP1], svk[MDP1];
+
+*NZ = 0;
+betav = betas = 0.25;
+u = -(2.0*sr);
+oss = sr;
+ovv = v = bnd;
+
+//Evaluate polynomial by synthetic division
+QuadSD_ak1(NN, u, v, p, qp, &a, &b);
+
+tFlag = calcSC_ak1(N, a, b, &a1, &a3, &a7, &c, &d, &e, &f, &g, &h, K, u, v, qk);
+
+for (j = 0; j < L2; j++){
+
+    //Calculate next K polynomial and estimate v
+    nextK_ak1(N, tFlag, a, b, a1, &a3, &a7, K, qk, qp);
+    tFlag = calcSC_ak1(N, a, b, &a1, &a3, &a7, &c, &d, &e, &f, &g, &h, K, u, v, qk);
+    newest_ak1(tFlag, &ui, &vi, a, a1, a3, a7, b, c, d, f, g, h, u, v, K, N, p);
+
+    vv = vi;
+
+    // Estimate s
+
+    ss = ((K[N - 1] != 0.0) ? -(p[N]/K[N - 1]) : 0.0);
+
+    ts = tv = 1.0;
+
+    if ((j != 0) && (tFlag != 3)){
+
+       // Compute relative measures of convergence of s and v sequences
+
+        tv = ((vv != 0.0) ? fabs((vv - ovv)/vv) : tv);
+        ts = ((ss != 0.0) ? fabs((ss - oss)/ss) : ts);
+
+        // If decreasing, multiply the two most recent convergence measures
+
+        tvv = ((tv < otv) ? tv*otv : 1.0);
+        tss = ((ts < ots) ? ts*ots : 1.0);
+
+        // Compare with convergence criteria
+
+        vpass = ((tvv < betav) ? 1 : 0);
+        spass = ((tss < betas) ? 1 : 0);
+
+        if ((spass) || (vpass)){
+
+            // At least one sequence has passed the convergence test.
+            // Store variables before iterating
+
+            for (i = 0; i < N; i++)   svk[i] = K[i];
+
+            s = ss;
+
+            // Choose iteration according to the fastest converging sequence
+
+            stry = vtry = 0;
+            fflag = 1;
+
+            do {
+
+                iFlag = 1; // Begin each loop by assuming RealIT will be called UNLESS iFlag changed below
+
+                if ((fflag && ((fflag = 0) == 0)) && ((spass) && (!vpass || (tss < tvv)))){
+                    ; // Do nothing. Provides a quick "short circuit".
+                } // End if (fflag)
+
+                else { // else !fflag
+                    QuadIT_ak1(N, NZ, ui, vi, szr, szi, lzr, lzi, qp, NN, &a, &b, p, qk, &a1, &a3, &a7, &d, &e, &f, &g, &h, K);
+
+                    if ((*NZ) > 0)   return;
+
+                    // Quadratic iteration has failed. Flag that it has been tried and decrease the
+                    // convergence criterion
+
+                    vtry = 1;
+                    betav *= 0.25;
+
+                    // Try linear iteration if it has not been tried and the s sequence is converging
+                    if (stry || (!spass)){
+                        iFlag = 0;
+                    } // End if (stry || (!spass))
+                    else {
+                        for (i = 0; i < N; i++)   K[i] = svk[i];
+                    } // End if (stry || !spass)
+
+                } // End else !fflag
+
+                if (iFlag != 0){
+                    RealIT_ak1(&iFlag, NZ, &s, N, p, NN, qp, szr, szi, K, qk);
+
+                    if ((*NZ) > 0)   return;
+
+                    // Linear iteration has failed. Flag that it has been tried and decrease the
+                    // convergence criterion
+
+                    stry = 1;
+                    betas *= 0.25;
+
+                    if (iFlag != 0){
+
+                        // If linear iteration signals an almost double real zero, attempt quadratic iteration
+
+                        ui = -(s + s);
+                        vi = s*s;
+                        continue;
+
+                    } // End if (iFlag != 0)
+                } // End if (iFlag != 0)
+
+                // Restore variables
+                for (i = 0; i < N; i++)   K[i] = svk[i];
+
+                // Try quadratic iteration if it has not been tried and the v sequence is converging
+
+            } while (vpass && !vtry); // End do-while loop
+
+            // Re-compute qp and scalar values to continue the second stage
+
+            QuadSD_ak1(NN, u, v, p, qp, &a, &b);
+            tFlag = calcSC_ak1(N, a, b, &a1, &a3, &a7, &c, &d, &e, &f, &g, &h, K, u, v, qk);
+
+        } // End if ((spass) || (vpass))
+
+    } // End if ((j != 0) && (tFlag != 3))
+
+    ovv = vv;
+    oss = ss;
+    otv = tv;
+    ots = ts;
+} // End for j
+
+return;
+} // End Fxshfr_ak1
+
+void QuadSD_ak1(int NN, double u, double v, double p[MDP1], double q[MDP1], double* a, double* b){
+
+// Divides p by the quadratic 1, u, v placing the quotient in q and the remainder in a, b
+
+int i;
+
+q[0] = *b = p[0];
+q[1] = *a = -((*b)*u) + p[1];
+
+for (i = 2; i < NN; i++){
+    q[i] = -((*a)*u + (*b)*v) + p[i];
+    *b = (*a);
+    *a = q[i];
+} // End for i
+
+return;
+} // End QuadSD_ak1
+
+int calcSC_ak1(int N, double a, double b, double* a1, double* a3, double* a7, double* c, double* d, double* e, double* f, double* g, double* h, double K[MDP1], double u, double v, double qk[MDP1]){
+
+// This routine calculates scalar quantities used to compute the next K polynomial and
+// new estimates of the quadratic coefficients.
+
+// calcSC - integer variable set here indicating how the calculations are normalized
+// to avoid overflow.
+
+int dumFlag = 3; // TYPE = 3 indicates the quadratic is almost a factor of K
+
+// Synthetic division of K by the quadratic 1, u, v
+QuadSD_ak1(N, u, v, K, qk, c, d);
+
+if (fabs((*c)) <= (100.0*DBL_EPSILON*fabs(K[N - 1]))) {
+    if (fabs((*d)) <= (100.0*DBL_EPSILON*fabs(K[N - 2])))   return dumFlag;
+} // End if (fabs(c) <= (100.0*DBL_EPSILON*fabs(K[N - 1])))
+
+*h = v*b;
+if (fabs((*d)) >= fabs((*c))){
+    dumFlag = 2; // TYPE = 2 indicates that all formulas are divided by d
+    *e = a/(*d);
+    *f = (*c)/(*d);
+    *g = u*b;
+    *a3 = (*e)*((*g) + a) + (*h)*(b/(*d));
+    *a1 = -a + (*f)*b;
+    *a7 = (*h) + ((*f) + u)*a;
+} // End if(fabs(d) >= fabs(c))
+else {
+    dumFlag = 1; // TYPE = 1 indicates that all formulas are divided by c;
+    *e = a/(*c);
+    *f = (*d)/(*c);
+    *g = (*e)*u;
+    *a3 = (*e)*a + ((*g) + (*h)/(*c))*b;
+    *a1 = -(a*((*d)/(*c))) + b;
+    *a7 = (*g)*(*d) + (*h)*(*f) + a;
+} // End else
+
+return dumFlag;
+} // End calcSC_ak1
+
+void nextK_ak1(int N, int tFlag, double a, double b, double a1, double* a3, double* a7, double K[MDP1], double qk[MDP1], double qp[MDP1]){
+
+// Computes the next K polynomials using the scalars computed in calcSC_ak1
+
+int i;
+double temp;
+
+if (tFlag == 3){ // Use unscaled form of the recurrence
+    K[1] = K[0] = 0.0;
+
+    for (i = 2; i < N; i++)   K[i] = qk[i - 2];
+
+    return;
+} // End if (tFlag == 3)
+
+temp = ((tFlag == 1) ? b : a);
+
+if (fabs(a1) > (10.0*DBL_EPSILON*fabs(temp))){
+    // Use scaled form of the recurrence
+
+    (*a7) /= a1;
+    (*a3) /= a1;
+    K[0] = qp[0];
+    K[1] = -((*a7)*qp[0]) + qp[1];
+
+    for (i = 2; i < N; i++)   K[i] = -((*a7)*qp[i - 1]) + (*a3)*qk[i - 2] + qp[i];
+
+} // End if (fabs(a1) > (10.0*DBL_EPSILON*fabs(temp)))
+else {
+    // If a1 is nearly zero, then use a special form of the recurrence
+
+    K[0] = 0.0;
+    K[1] = -(*a7)*qp[0];
+
+    for (i = 2; i < N; i++)   K[i] = -((*a7)*qp[i - 1]) + (*a3)*qk[i - 2];
+} // End else
+
+return;
+
+} // End nextK_ak1
+
+void newest_ak1(int tFlag, double* uu, double* vv, double a, double a1, double a3, double a7, double b, double c, double d, double f, double g, double h, double u, double v, double K[MDP1], int N, double p[MDP1]){
+// Compute new estimates of the quadratic coefficients using the scalars computed in calcSC_ak1
+
+double a4, a5, b1, b2, c1, c2, c3, c4, temp;
+
+(*vv) = (*uu) = 0.0; // The quadratic is zeroed
+
+if (tFlag != 3){
+
+    if (tFlag != 2){
+        a4 = a + u*b + h*f;
+        a5 = c + (u + v*f)*d;
+    } // End if (tFlag != 2)
+    else { // else tFlag == 2
+        a4 = (a + g)*f + h;
+        a5 = (f + u)*c + v*d;
+    } // End else tFlag == 2
+
+    // Evaluate new quadratic coefficients
+
+    b1 = -K[N - 1]/p[N];
+    b2 = -(K[N - 2] + b1*p[N - 1])/p[N];
+    c1 = v*b2*a1;
+    c2 = b1*a7;
+    c3 = b1*b1*a3;
+    c4 = -(c2 + c3) + c1;
+    temp = -c4 + a5 + b1*a4;
+    if (temp != 0.0) {
+        *uu= -((u*(c3 + c2) + v*(b1*a1 + b2*a7))/temp) + u;
+        *vv = v*(1.0 + c4/temp);
+    } // End if (temp != 0)
+
+} // End if (tFlag != 3)
+
+return;
+} // End newest_ak1
+
+void QuadIT_ak1(int N, int* NZ, double uu, double vv, double* szr, double* szi, double* lzr, double* lzi, double qp[MDP1], int NN, double* a, double* b, double p[MDP1], double qk[MDP1], double* a1, double* a3, double* a7, double* d, double* e, double* f, double* g, double* h, double K[MDP1]){
+
+// Variable-shift K-polynomial iteration for a quadratic factor converges only if the
+// zeros are equimodular or nearly so.
+
+int i, j = 0, tFlag, triedFlag = 0;
+double c, ee, mp, omp, relstp, t, u, ui, v, vi, zm;
+
+*NZ = 0; // Number of zeros found
+u = uu; // uu and vv are coefficients of the starting quadratic
+v = vv;
+
+do {
+    Quad_ak1(1.0, u, v, szr, szi, lzr, lzi);
+
+    // Return if roots of the quadratic are real and not close to multiple or nearly
+    // equal and of opposite sign.
+
+    if (fabs(fabs(*szr) - fabs(*lzr)) > 0.01*fabs(*lzr))   break;
+
+    // Evaluate polynomial by quadratic synthetic division
+
+    QuadSD_ak1(NN, u, v, p, qp, a, b);
+
+    mp = fabs(-((*szr)*(*b)) + (*a)) + fabs((*szi)*(*b));
+
+    // Compute a rigorous bound on the rounding error in evaluating p
+
+    zm = sqrt(fabs(v));
+    ee = 2.0*fabs(qp[0]);
+    t = -((*szr)*(*b));
+
+    for (i = 1; i < N; i++)   ee = ee*zm + fabs(qp[i]);
+
+    ee = ee*zm + fabs((*a) + t);
+    ee = (9.0*ee + 2.0*fabs(t) - 7.0*(fabs((*a) + t) + zm*fabs((*b))))*DBL_EPSILON;
+
+    // Iteration has converged sufficiently if the polynomial value is less than 20 times this bound
+
+    if (mp <= 20.0*ee){
+        *NZ = 2;
+        break;
+    } // End if (mp <= 20.0*ee)
+
+    j++;
+
+    // Stop iteration after 20 steps
+    if (j > 20)   break;
+
+    if (j >= 2){
+        if ((relstp <= 0.01) && (mp >= omp) && (!triedFlag)){
+        // A cluster appears to be stalling the convergence. Five fixed shift
+        // steps are taken with a u, v close to the cluster.
+
+        relstp = ((relstp < DBL_EPSILON) ? sqrt(DBL_EPSILON) : sqrt(relstp));
+
+        u -= u*relstp;
+        v += v*relstp;
+
+        QuadSD_ak1(NN, u, v, p, qp, a, b);
+
+        for (i = 0; i < 5; i++){
+            tFlag = calcSC_ak1(N, *a, *b, a1, a3, a7, &c, d, e, f, g, h, K, u, v, qk);
+            nextK_ak1(N, tFlag, *a, *b, *a1, a3, a7, K, qk, qp);
+        } // End for i
+
+        triedFlag = 1;
+        j = 0;
+
+        } // End if ((relstp <= 0.01) && (mp >= omp) && (!triedFlag))
+
+    } // End if (j >= 2)
+
+    omp = mp;
+
+    // Calculate next K polynomial and new u and v
+
+    tFlag = calcSC_ak1(N, *a, *b, a1, a3, a7, &c, d, e, f, g, h, K, u, v, qk);
+    nextK_ak1(N, tFlag, *a, *b, *a1, a3, a7, K, qk, qp);
+    tFlag = calcSC_ak1(N, *a, *b, a1, a3, a7, &c, d, e, f, g, h, K, u, v, qk);
+    newest_ak1(tFlag, &ui, &vi, *a, *a1, *a3, *a7, *b, c, *d, *f, *g, *h, u, v, K, N, p);
+
+    // If vi is zero, the iteration is not converging
+    if (vi != 0){
+        relstp = fabs((-v + vi)/vi);
+        u = ui;
+        v = vi;
+    } // End if (vi != 0)
+} while (vi != 0); // End do-while loop
+
+return;
+
+} //End QuadIT_ak1
+
+void RealIT_ak1(int* iFlag, int* NZ, double* sss, int N, double p[MDP1], int NN, double qp[MDP1], double* szr, double* szi, double K[MDP1], double qk[MDP1]){
+
+// Variable-shift H-polynomial iteration for a real zero
+
+// sss - starting iterate
+// NZ - number of zeros found
+// iFlag - flag to indicate a pair of zeros near real axis
+
+int i, j = 0, nm1 = N - 1;
+double ee, kv, mp, ms, omp, pv, s, t;
+
+*iFlag = *NZ = 0;
+s = *sss;
+
+for ( ; ; ) {
+    qp[0] = pv = p[0];
+
+    // Evaluate p at s
+    for (i = 1; i < NN; i++)   qp[i] = pv = pv*s + p[i];
+
+    mp = fabs(pv);
+
+    // Compute a rigorous bound on the error in evaluating p
+
+    ms = fabs(s);
+    ee = 0.5*fabs(qp[0]);
+    for (i = 1; i < NN; i++)   ee = ee*ms + fabs(qp[i]);
+
+    // Iteration has converged sufficiently if the polynomial value is less than
+    // 20 times this bound
+
+    if (mp <= 20.0*DBL_EPSILON*(2.0*ee - mp)){
+        *NZ = 1;
+        *szr = s;
+        *szi = 0.0;
+        break;
+    } // End if (mp <= 20.0*DBL_EPSILON*(2.0*ee - mp))
+
+    j++;
+
+    // Stop iteration after 10 steps
+
+    if (j > 10)   break;
+
+    if (j >= 2){
+        if ((fabs(t) <= 0.001*fabs(-t + s)) && (mp > omp)){
+            // A cluster of zeros near the real axis has been encountered;
+            // Return with iFlag set to initiate a quadratic iteration
+
+            *iFlag = 1;
+            *sss = s;
+            break;
+        } // End if ((fabs(t) <= 0.001*fabs(s - t)) && (mp > omp))
+
+    } //End if (j >= 2)
+
+    // Return if the polynomial value has increased significantly
+
+    omp = mp;
+
+    // Compute t, the next polynomial and the new iterate
+    qk[0] = kv = K[0];
+    for (i = 1; i < N; i++)   qk[i] = kv = kv*s + K[i];
+
+    if (fabs(kv) > fabs(K[nm1])*10.0*DBL_EPSILON){
+        // Use the scaled form of the recurrence if the value of K at s is non-zero
+        t = -(pv/kv);
+        K[0] = qp[0];
+        for (i = 1; i < N; i++)   K[i] = t*qk[i - 1] + qp[i];
+    } // End if (fabs(kv) > fabs(K[nm1])*10.0*DBL_EPSILON)
+    else { // else (fabs(kv) <= fabs(K[nm1])*10.0*DBL_EPSILON)
+        // Use unscaled form
+        K[0] = 0.0;
+        for (i = 1; i < N; i++)   K[i] = qk[i - 1];
+    } // End else (fabs(kv) <= fabs(K[nm1])*10.0*DBL_EPSILON)
+
+    kv = K[0];
+    for (i = 1; i < N; i++)   kv = kv*s + K[i];
+
+    t = ((fabs(kv) > (fabs(K[nm1])*10.0*DBL_EPSILON)) ? -(pv/kv) : 0.0);
+
+    s += t;
+
+} // End infinite for loop
+
+return;
+
+} // End RealIT_ak1
+
+void Quad_ak1(double a, double b1, double c, double* sr, double* si, double* lr, double* li) {
+// Calculates the zeros of the quadratic a*Z^2 + b1*Z + c
+// The quadratic formula, modified to avoid overflow, is used to find the larger zero if the
+// zeros are real and both zeros are complex. The smaller real zero is found directly from
+// the product of the zeros c/a.
+
+double b, d, e;
+
+*sr = *si = *lr = *li = 0.0;
+
+if (a == 0) {
+    *sr = ((b1 != 0) ? -(c/b1) : *sr);
+    return;
+} // End if (a == 0))
+
+if (c == 0){
+    *lr = -(b1/a);
+    return;
+} // End if (c == 0)
+
+// Compute discriminant avoiding overflow
+
+b = b1/2.0;
+if (fabs(b) < fabs(c)){
+    e = ((c >= 0) ? a : -a);
+    e = -e + b*(b/fabs(c));
+    d = sqrt(fabs(e))*sqrt(fabs(c));
+} // End if (fabs(b) < fabs(c))
+else { // Else (fabs(b) >= fabs(c))
+    e = -((a/b)*(c/b)) + 1.0;
+    d = sqrt(fabs(e))*(fabs(b));
+} // End else (fabs(b) >= fabs(c))
+
+if (e >= 0) {
+    // Real zeros
+
+    d = ((b >= 0) ? -d : d);
+    *lr = (-b + d)/a;
+    *sr = ((*lr != 0) ? (c/(*lr))/a : *sr);
+} // End if (e >= 0)
+else { // Else (e < 0)
+    // Complex conjugate zeros
+
+    *lr = *sr = -(b/a);
+    *si = fabs(d/a);
+    *li = -(*si);
+} // End else (e < 0)
+
+return;
+} // End Quad_ak1
 
 template <typename Vector>
 Vector MultiplyPolynomials(const Vector& poly1, const Vector& poly2) {
@@ -229,27 +839,6 @@ Vector MultiplyPolynomials(const Vector& poly1, const Vector& poly2) {
 }
 
 template <typename Vector>
-Vector AddPolynomials(const Vector& poly1, const Vector& poly2) {
-    if (poly1.size() > poly2.size()) {
-        Vector sum = poly1;
-        int diff = poly1.size() - poly2.size();
-        // Add poly2 to the last poly2.size() elements of sum
-        for (size_t i = 0;  i < poly2.size(); ++i){
-            sum[diff + i] += poly2[i];
-        }
-        return sum;
-    } else {
-        Vector sum = poly2;
-        int diff = poly2.size() - poly1.size();
-        // Add poly1 to the last poly1.size() elements of sum
-        for (size_t i = 0;  i < poly1.size(); ++i){
-            sum[diff + i] += poly1[i];
-        }
-        return sum;
-    }
-}
-
-template <typename Vector>
 Vector CreatePolynomialFromRoots(Vector& roots){
     Vector poly = {1.0};
     for (auto root : roots){
@@ -259,836 +848,26 @@ Vector CreatePolynomialFromRoots(Vector& roots){
     return poly;
 }
 
-template <typename Vector>
-typename Vector::value_type FindRootIterativeNewton(const Vector& polynomial, const typename Vector::value_type x0,
-                             const typename Vector::value_type epsilon, const int max_iterations) {
-    using namespace sw::universal;
-    using std::abs;
-    using Real = typename Vector::value_type;
-    
-    Real root = x0;
-    const Vector derivative = DifferentiatePolynomial(polynomial);
-  
-    Real prev;
-    for (int i = 0; i < max_iterations; i++) {
-        prev = root;
-        root -= EvaluatePolynomial(polynomial, root) / EvaluatePolynomial(derivative, root);
-        if (abs(prev - root) < epsilon) {
-            break;
-        }
-    }
-    return root;
-}
-
-// Solves for the root of the equation ax + b = 0.
-template <typename Real>
-Real FindLinearPolynomialRoots(const Real a, const Real b) {
-  return -b / a;
-}
-
-// Stable quadratic roots according to BKP Horn.
-// http://people.csail.mit.edu/bkph/articles/Quadratics.pdf
-template <typename Real>
-void FindQuadraticPolynomialRoots(const Real a, const Real b, const Real c,
-                                  std::vector<std::complex<Real>>& roots) { 
-    // NOTE: whenever I create a vector internally it is with std::vector
-    // This vector will always be of the type std::vector<std::complex<typename Vector::value_type>>
-
-    using namespace sw::universal;
-    using std::sqrt, std::abs;
-    const Real D = b * b - 4 * a * c;
-    const Real sqrt_D = sqrt(abs(D));
-
-    // Real roots.
-    if (D >= 0) {
-        if (b >= 0) {
-            roots[0] = std::complex<Real>((-b - sqrt_D) / (2.0 * a), 0);
-            roots[1] = std::complex<Real>((2.0 * c) / (-b - sqrt_D), 0);
-        } else {
-            roots[0] = std::complex<Real>((2.0 * c) / (-b + sqrt_D), 0);
-            roots[1] = std::complex<Real>((-b + sqrt_D) / (2.0 * a), 0);
-        }
-        return;
-    }
-
-    // Use the normal quadratic formula for the complex case.
-    roots[0] = std::complex<Real>(-b / (2.0 * a), sqrt_D / (2.0 * a));
-    roots[1] = std::complex<Real>(-b / (2.0 * a), -sqrt_D / (2.0 * a));
-}
-
-// Perform division by a linear term of the form (z - x) and evaluate P at x.
-template <typename Vector>
-void SyntheticDivisionAndEvaluate(const Vector& polynomial,
-                                  const typename Vector::value_type x,
-                                  Vector& quotient,
-                                  typename Vector::value_type& eval) {
-    quotient = Vector(polynomial.size() - 1, 0); 
-    quotient[0] = polynomial[0];
-    for (size_t i = 1; i < polynomial.size() - 1; i++) {
-        quotient[i] = polynomial[i] + quotient[i - 1] * x;
-    }
-    eval = polynomial[polynomial.size() - 1] + quotient[quotient.size() - 1] * x;
-}
-
-// Perform division of a polynomial by a quadratic factor. The quadratic divisor should have leading 1s.
-template <typename Vector>
-void QuadraticSyntheticDivision(const Vector& polynomial,
-                                const Vector& quadratic_divisor,
-                                Vector& quotient,
-                                Vector& remainder) {
-    quotient = Vector(polynomial.size() - 2, 0);
-    remainder = Vector(2, 0);
-
-    quotient[0] = polynomial[0];
-
-    // If the quotient is a constant then polynomial is degree 2 and the math is simple.
-    if (quotient.size() == 1) {
-        remainder[0] = polynomial[polynomial.size() - 2] - polynomial[0] * quadratic_divisor[quadratic_divisor.size() - 2];
-        remainder[1] = polynomial[polynomial.size() - 1] - polynomial[0] * quadratic_divisor[quadratic_divisor.size() - 1];
-        return; 
-    }
-
-    quotient[1] = polynomial[1] - polynomial[0] * quadratic_divisor[1];
-    for (size_t i = 2; i < polynomial.size() - 2; ++i) {
-        quotient[i] = polynomial[i] - 
-                        quotient[i - 2] * quadratic_divisor[2] - 
-                        quotient[i - 1] * quadratic_divisor[1];
-    }
-
-    remainder[0] = polynomial[polynomial.size() - 2] -
-                        quadratic_divisor[1] * quotient[quotient.size() - 1] -
-                        quadratic_divisor[2] * quotient[quotient.size() - 2];
-    remainder[1] = polynomial[polynomial.size() - 1] - 
-                        quadratic_divisor[2] * quotient[quotient.size() - 1];
-}
-
-// Determines whether the iteration has converged by examining the three most recent values for convergence.
-template <typename Real>
-bool HasConvergedComplex(const std::vector<std::complex<Real>>& sequence) {
-    using namespace sw::universal;
-    using std::abs;
-    
-    const bool convergence_condition_1 =
-        abs(sequence[1] - sequence[0]) < abs(sequence[0]) / Real(2.0);
-    const bool convergence_condition_2 =
-        abs(sequence[2] - sequence[1]) < abs(sequence[1]) / Real(2.0);
-
-    // If the sequence has converged then return true.
-    return convergence_condition_1 && convergence_condition_2;
-}
-template <typename Real>
-bool HasConverged(const std::vector<Real>& sequence) {
-    using namespace sw::universal;
-    using std::abs;
-    
-    const bool convergence_condition_1 =
-        abs(sequence[1] - sequence[0]) < abs(sequence[0]) / Real(2.0);
-    const bool convergence_condition_2 =
-        abs(sequence[2] - sequence[1]) < abs(sequence[1]) / Real(2.0);
-
-    // If the sequence has converged then return true.
-    return convergence_condition_1 && convergence_condition_2;
-}
-
-// Implementation closely follows the three-stage algorithm for finding roots of
-// polynomials with real coefficients as outlined in: "A Three-Stage Algorithm
-// for Real Polynomaials Using Quadratic Iteration" by Jenkins and Traub, SIAM
-// 1970. Please note that this variant is different than the complex-coefficient
-// version, and is estimated to be up to 4 times faster.
-template <typename Vector>
-class JenkinsTraubSolver {
-using Real = typename Vector::value_type; // TODO: check that this is right placement for this
-public:
-    JenkinsTraubSolver(const Vector& coeffs, Vector& real_roots, Vector& complex_roots)
-        : polynomial_(coeffs), real_roots_(real_roots), complex_roots_(complex_roots), num_solved_roots_(0), currentRecursionDepth(0) 
-        { sigma_.resize(3); }
-
-    // Extracts the roots using the Jenkins Traub method.
-    bool ExtractRoots() {
-        using namespace sw::universal;
-		using std::abs, std::cos, std::sin;
-
-        if (polynomial_.size() == 0) {
-            std::cout << "Invalid polynomial of size 0 passed to FindPolynomialRootsJenkinsTraub\n";
-            return false;
-        }
-
-        // Remove any leading zeros of the polynomial.
-        polynomial_ = RemoveLeadingZeros(polynomial_);
-        // Normalize the polynomial.
-        Real leading_coeffecient = polynomial_[0];
-        for (size_t i = 0; i < polynomial_.size(); ++i){
-            polynomial_[i] /= leading_coeffecient;
-        }
-        
-        const int degree = polynomial_.size() - 1;
-
-        // Allocate the output roots.
-        real_roots_ = Vector(degree, 0);
-        complex_roots_ = Vector(degree, 0);
-
-        // Remove any zero roots.
-        RemoveZeroRoots();
-
-        // Choose the initial starting value for the root-finding on the complex plane.
-        const Real kDegToRad = M_PI / 180.0;
-        Real phi = 49.0 * kDegToRad;
-
-        // Iterate until the polynomial has been completely deflated.
-        for (int i = 0; i < degree; i++) {
-            // Compute the root radius.
-            const Real root_radius = ComputeRootRadius();
-
-            // Solve in closed form if the polynomial is small enough.
-            if (polynomial_.size() <= 3) {
-                break;
-            }
-
-            // Stage 1: Apply zero-shifts to the K-polynomial to separate the small zeros of the polynomial.
-            ApplyZeroShiftToKPolynomial(kNumZeroShiftIterations);
-
-            // Stage 2: Apply fixed shift iterations to the K-polynomial to separate the roots further.
-            std::complex<Real> root;
-            ConvergenceType convergence = NO_CONVERGENCE;
-            for (int j = 0; j < kMaxFixedShiftRestarts; ++j) {
-                root = root_radius * std::complex<Real>(cos(phi), sin(phi));
-                convergence = ApplyFixedShiftToKPolynomial(root, kFixedShiftIterationMultiplier * (i + 1));
-                if (convergence != NO_CONVERGENCE) {
-                    break;
-                }
-
-                // Rotate the initial root value on the complex plane and try again.
-                phi += 94.0 * kDegToRad;
-            }
-
-            // Stage 3: Find the root(s) with variable shift iterations on the
-            // K-polynomial. If this stage was not successful then we return a failure.
-            if (!ApplyVariableShiftToKPolynomial(convergence, root)) {
-                return false;
-            }
-        }
-        return SolveClosedFormPolynomial();
-    }
-
-    int GetNumSolvedRoots(){
-        return num_solved_roots_;
-    }
-
-private:
-    // Removes any zero roots and divides polynomial by z.
-    void RemoveZeroRoots() {
-        int num_zero_roots = 0;
-
-        while (polynomial_[polynomial_.size() - 1 - num_zero_roots] == 0) {
-            ++num_zero_roots;
-        }
-
-        // The output roots have 0 as the default value so there is no need to explicitly add the zero roots.
-        polynomial_.resize(polynomial_.size() - num_zero_roots); // TODO: made a bit of a change here (was .head().eval()), needs verification
-    }
-
-    // Computes the magnitude of the roots to provide and initial search radius
-    // for the iterative solver.
-    Real ComputeRootRadius() {
-        // Computes a lower bound on the radius of the roots of polynomial by examining
-        // the Cauchy sequence:
-        //
-        //    z^n + |a_1| * z^{n - 1} + ... + |a_{n-1}| * z - |a_n|
-        //
-        // The unique positive zero of this polynomial is an approximate lower bound of
-        // the radius of zeros of the original polynomial.
-
-        static const Real kEpsilon = 1e-2;
-        static const int kMaxIterations = 100;
-
-        Vector poly = polynomial_;
-        // Take the absolute value of all coefficients.
-        for (size_t i = 0; i < poly.size(); ++i) {
-            poly[i] = abs(poly[i]); // TODO: might need sw::universal here...
-        }
-        // Negate the last coefficient.
-        poly[poly.size() - 1] *= -1.0;
-
-        // Find the unique positive zero using Newton-Raphson iterations.
-        Real x0 = 1.0;
-        return FindRootIterativeNewton(poly, x0, kEpsilon, kMaxIterations);
-    }
-
-    // Computes the zero-shift applied to the K-Polynomial.
-    void ComputeZeroShiftKPolynomial() {
-        // The k polynomial with a zero-shift is
-        //  (K(x) - K(0) / P(0) * P(x)) / x.
-        //
-        // This is equivalent to:
-        //    K(x) - K(0)      K(0)     P(x) - P(0)
-        //    ___________   -  ____  *  ___________
-        //         x           P(0)          x
-        //
-        // Note that removing the constant term and dividing by x is equivalent to
-        // shifting the polynomial to one degree lower in our representation.
-
-        // Evaluating the polynomial at zero is equivalent to the constant term
-        // (i.e. the last coefficient). Note that reverse() is an expression and does
-        // not actually reverse the vector elements.
-        const Real polynomial_at_zero = polynomial_[polynomial_.size() - 1];
-        const Real k_at_zero = k_polynomial_[k_polynomial_.size() - 1];
-
-        k_polynomial_ = AddPolynomials(Head(k_polynomial_, k_polynomial_.size() - 1), MultiplyPolynomials({-k_at_zero / polynomial_at_zero}, Head(polynomial_, polynomial_.size() - 1)));
-    }
-
-    // Stage 1 of the Jenkins-Traub method. This stage is not technically
-    // necessary, but helps separate roots that are close to zero.
-    //
-    // Stage 1: Generate K-polynomials with no shifts (i.e. zero-shifts).
-    void ApplyZeroShiftToKPolynomial(const int num_iterations) {
-        // K0 is the first order derivative of polynomial.
-        k_polynomial_ = DifferentiatePolynomial(polynomial_);
-        for (size_t i = 0; i < k_polynomial_.size(); ++i){
-            k_polynomial_[i] /= polynomial_.size();
-        }
-
-        for (int i = 1; i < num_iterations; ++i) {
-            ComputeZeroShiftKPolynomial();
-        }
-    }
-
-    // Computes and returns the update of sigma(z) based on the current
-    // K-polynomial.
-    //
-    // NOTE: This function is used by the fixed shift iterations (which hold sigma
-    // constant) so sigma is *not* modified internally by this function. If you
-    // want to change sigma, simply call
-    //    sigma = ComputeNextSigma();
-    void ComputeNextSigma(Vector& nextSigma) {
-        // Using a bit of algebra, the update of sigma(z) can be computed from the
-        // previous value along with a, b, c, and d defined above. The details of this
-        // simplification can be found in "Three Stage Variable-Shift Iterations for the
-        // Solution of Polynomial Equations With a Posteriori Error Bounds for the
-        // Zeros" by M.A. Jenkins, Doctoral Thesis, Stanford Univeristy, 1969.
-        //
-        // NOTE: we assume the leading term of quadratic_sigma is 1.0.
-
-        const Real u = sigma_[1];
-        const Real v = sigma_[2];
-
-        const Real b1 = -k_polynomial_[k_polynomial_.size() - 1] / polynomial_[polynomial_.size() - 1];
-        const Real b2 = -(k_polynomial_[k_polynomial_.size() - 2] + b1 * polynomial_[polynomial_.size() - 2]) / polynomial_[polynomial_.size() - 1];
-
-        const Real a1 = b_ * c_ - a_ * d_;
-        const Real a2 = a_ * c_ + u * a_ * d_ + v * b_ * d_;
-        const Real c2 = b1 * a2;
-        const Real c3 = b1 * b1 * (a_ * a_ + u * a_ * b_ + v * b_ * b_);
-        const Real c4 = v * b2 * a1 - c2 - c3;
-        const Real c1 = c_ * c_ + u * c_ * d_ + v * d_ * d_ +
-            b1 * (a_ * c_ + u * b_ * c_ + v * b_ * d_) - c4;
-        const Real delta_u = -(u * (c2 + c3) + v * (b1 * a1 + b2 * a2)) / c1;
-        const Real delta_v = v * c4 / c1;
-
-        // Update u and v in the quadratic sigma.
-        nextSigma[0] = 1.0;
-        nextSigma[1] = u + delta_u;
-        nextSigma[2] = v + delta_v;
-    }
-
-
-    // Updates the K-polynomial based on the current value of sigma for the fixed
-    // or variable shift stage.
-    //
-    // The iterations are computed with the following equation:
-    //              a^2 + u * a * b + v * b^2
-    //   K_next =  ___________________________ * Q_K
-    //                    b * c - a * d
-    //
-    //                      a * c + u * a * d + v * b * d
-    //             +  (z - _______________________________) * Q_P + b.
-    //                              b * c - a * d
-    //
-    // This is done using *only* realy arithmetic so it can be done very fast!
-    void UpdateKPolynomialWithQuadraticShift(
-        const Vector& polynomial_quotient,
-        const Vector& k_polynomial_quotient) {
-
-        const Real coefficient_q_k = (a_ * a_ + sigma_[1] * a_ * b_ + sigma_[2] * b_ * b_) / (b_ * c_ - a_ * d_); // TODO: next segfault here
-        Vector linear_polynomial(2);
-        linear_polynomial[0] = Real(1.0);
-        linear_polynomial[1] = -(a_ * c_ + sigma_[1] * a_ * d_ + sigma_[2] * b_ * d_) / (b_ * c_ - a_ * d_);
-
-        k_polynomial_ = AddPolynomials(MultiplyPolynomials({coefficient_q_k}, k_polynomial_quotient), MultiplyPolynomials(linear_polynomial, polynomial_quotient));
-        k_polynomial_[k_polynomial_.size() - 1] += b_;
-    }
-
-    // Apply fixed-shift iterations to the K-polynomial to separate the
-    // roots. Based on the convergence of the K-polynomial, we apply a
-    // variable-shift linear or quadratic iteration to determine a real root or
-    // complex conjugate pair of roots respectively.
-    ConvergenceType ApplyFixedShiftToKPolynomial(const std::complex<Real>& root, const int max_iterations) {
-        // Compute the fixed-shift quadratic:
-        // sigma(z) = (x - m - n * i) * (x - m + n * i) = x^2 - 2 * m + m^2 + n^2.
-        sigma_[0] = Real(1.0);
-        sigma_[1] = Real(-2.0) * root.real();
-        sigma_[2] = root.real() * root.real() + root.imag() * root.imag();
-
-        // Compute the quotient and remainder for divinding P by the quadratic divisor.
-        // Since this iteration involves a fixed-shift sigma these may be computed once prior to any iterations.
-        Vector polynomial_quotient, polynomial_remainder;
-        QuadraticSyntheticDivision(polynomial_, sigma_, polynomial_quotient, polynomial_remainder);
-
-        // Compute a and b from the above equations.
-        b_ = polynomial_remainder[0];
-        a_ = polynomial_remainder[1] - b_ * sigma_[1];
-
-        // Precompute P(s) for later using the equation above.
-        const std::complex<Real> p_at_root = a_ - b_ * std::conj(root);
-
-        // These two containers hold values that we test for convergence such that the
-        // zero index is the convergence value from 2 iterations ago, the first
-        // index is from one iteration ago, and the second index is the current value.
-        std::vector<std::complex<Real>> t_lambda(3); // TODO: this breaks the templated Vector formatting... unsure how to extract container type
-        std::vector<Real> sigma_lambda(3);
-        Vector k_polynomial_quotient, k_polynomial_remainder;
-        for (int i = 0; i < max_iterations; ++i) {
-            Real leadingCoefficient = k_polynomial_[0];
-            for (size_t j = 0; j < k_polynomial_.size(); ++j){
-                k_polynomial_[j] /= leadingCoefficient;
-            }
-
-            // Divide the shifted polynomial by the quadratic polynomial.
-            QuadraticSyntheticDivision(k_polynomial_, sigma_, k_polynomial_quotient, k_polynomial_remainder);
-            d_ = k_polynomial_remainder[0];
-            c_ = k_polynomial_remainder[1] - d_ * sigma_[1];
-
-            // Test for convergence.
-            Vector variable_shift_sigma(3);
-            ComputeNextSigma(variable_shift_sigma);
-            const std::complex<Real> k_at_root = c_ - d_ * std::conj(root);
-
-
-            t_lambda[0] = t_lambda[1];
-            t_lambda[1] = t_lambda[2];
-
-            sigma_lambda[0] = sigma_lambda[1];
-            sigma_lambda[1] = sigma_lambda[2];
-
-            t_lambda[2] = root - p_at_root / k_at_root;
-            sigma_lambda[2] = variable_shift_sigma[2];
-
-            // Return with the convergence code if the sequence has converged.
-            if (HasConverged(sigma_lambda)) {
-                return QUADRATIC_CONVERGENCE;
-            }
-            else if (HasConvergedComplex(t_lambda)) {
-                return LINEAR_CONVERGENCE;
-            }
-
-            // Compute K_next using the formula above.
-            UpdateKPolynomialWithQuadraticShift(polynomial_quotient, k_polynomial_quotient);
-        }
-
-        return NO_CONVERGENCE;
-    }
-
-    // Applies one of the variable shifts to the K-Polynomial. Returns true upon
-    // successful convergence to a good root, and false otherwise.
-    bool ApplyVariableShiftToKPolynomial(const ConvergenceType& fixed_shift_convergence, const std::complex<Real>& root) {
-        attempted_linear_shift_ = false;
-        attempted_quadratic_shift_ = false;
-
-        if (fixed_shift_convergence == LINEAR_CONVERGENCE) {
-            return ApplyLinearShiftToKPolynomial(root, kMaxLinearShiftIterations);
-        }
-        else if (fixed_shift_convergence == QUADRATIC_CONVERGENCE) {
-            return ApplyQuadraticShiftToKPolynomial(root, kMaxQuadraticShiftIterations);
-        }
-        return false;
-    }
-
-    // Determines if the root has converged by measuring the relative and absolute
-    // change in the root value. This stopping criterion is a simple measurement
-    // that proves to work well. It is referred to as "Ward's method" in the
-    // following reference:
-    //
-    // Nikolajsen, Jorgen L. "New stopping criteria for iterative root finding."
-    // Royal Society open science (2014)
-    bool HasRootConverged(const std::vector<Real>& roots) {
-        using namespace sw::universal;
-        using std::abs;
-        
-        if (roots.size() != 3) {
-            return false;
-        }
-
-        const Real e_i = abs(roots[2] - roots[1]);
-        const Real e_i_minus_1 = abs(roots[1] - roots[0]);
-        const Real mag_root = abs(roots[1]);
-        if (e_i <= e_i_minus_1) {
-            if (mag_root < kRootMagnitudeTolerance) {
-                return e_i < kAbsoluteTolerance;
-            } else {
-                return e_i / mag_root <= kRelativeTolerance;
-            }
-        }
-
-        return false;
-    }
-    bool HasRootConverged(const std::vector<std::complex<Real>>& roots) {
-        using namespace sw::universal;
-        using std::abs;
-        
-        if (roots.size() != 3) {
-            return false;
-        }
-
-        const Real e_i = abs(roots[2] - roots[1]);
-        const Real e_i_minus_1 = abs(roots[1] - roots[0]);
-        const Real mag_root = abs(roots[1]);
-        if (e_i <= e_i_minus_1) {
-            if (mag_root < kRootMagnitudeTolerance) {
-                return e_i < kAbsoluteTolerance;
-            } else {
-                return e_i / mag_root <= kRelativeTolerance;
-            }
-        }
-
-        return false;
-    }
-
-    // Applies a quadratic shift to the K-polynomial to determine a pair of roots
-    // that are complex conjugates. Return true if a root was successfully found.
-    bool ApplyQuadraticShiftToKPolynomial(const std::complex<Real>& root, const int max_iterations) {
-        // Generate K-polynomials with variable-shifts. During variable shifts, the
-        // quadratic shift is computed as:
-        //                | K0(s1)  K0(s2)  z^2 |
-        //                | K1(s1)  K1(s2)    z |
-        //                | K2(s1)  K2(s2)    1 |
-        //    sigma(z) = __________________________
-        //                  | K1(s1)  K2(s1) |
-        //                  | K2(s1)  K2(s2) |
-        // Where K0, K1, and K2 are successive zero-shifts of the K-polynomial.
-        //
-        // The K-polynomial shifts are otherwise exactly the same as Stage 2 after accounting for a variable-shift sigma.
-
-        using namespace sw::universal;
-        using std::abs;
-
-        // Only proceed if we have not already tried a quadratic shift.
-        ++currentRecursionDepth;
-        if (attempted_quadratic_shift_ || currentRecursionDepth >= kMaxRecursionDepth) {
-            return false;
-        }
-
-        const Real kTinyRelativeStep = 0.01;
-
-        // Compute the fixed-shift quadratic:
-        // sigma(z) = (x - m - n * i) * (x - m + n * i) = x^2 - 2 * m + m^2 + n^2.
-        sigma_[0] = Real(1.0);
-        sigma_[1] = Real(-2.0) * root.real();
-        sigma_[2] = root.real() * root.real() + root.imag() * root.imag();
-
-        // These two containers hold values that we test for convergence such that the
-        // zero index is the convergence value from 2 iterations ago, the first
-        // index is from one iteration ago, and the second index is the current value.
-        Vector polynomial_quotient, polynomial_remainder, k_polynomial_quotient, k_polynomial_remainder;
-        Real poly_at_root{ 0.0 }, prev_poly_at_root{ 0.0 }, prev_v{ 0.0 };
-        bool tried_fixed_shifts = false;
-
-        // These containers maintain a history of the predicted roots. The convergence
-        // of the algorithm is determined by the convergence of the root value.
-        std::vector<std::complex<Real>> roots1, roots2;
-        roots1.push_back(root);
-        roots2.push_back(std::conj(root));
-        for (int i = 0; i < max_iterations; i++) {
-            // Terminate if the root evaluation is within our tolerance. This will
-            // return false if we do not have enough samples.
-            if (HasRootConverged(roots1) && HasRootConverged(roots2)) {
-                AddRootToOutput(roots1[1].real(), roots1[1].imag());
-                AddRootToOutput(roots2[1].real(), roots2[1].imag());
-                polynomial_ = polynomial_quotient;
-                return true;
-            }
-
-            QuadraticSyntheticDivision(polynomial_, sigma_, polynomial_quotient, polynomial_remainder);
-
-            // Compute a and b from the above equations.
-            b_ = polynomial_remainder[0];
-            a_ = polynomial_remainder[1] - b_ * sigma_[1];
-
-            std::vector<std::complex<Real>> roots(2);
-            FindQuadraticPolynomialRoots(sigma_[0], sigma_[1], sigma_[2], roots);
-
-            // Check that the roots are close. If not, then try a linear shift.
-            if (abs(abs(roots[0].real()) - abs(roots[1].real())) > kRootPairTolerance * abs(roots[1].real())) {
-
-                return ApplyLinearShiftToKPolynomial(root, kMaxLinearShiftIterations);
-            }
-
-            // If the iteration is stalling at a root pair then apply a few fixed shift
-            // iterations to help convergence.
-            poly_at_root = abs(a_ - roots[0].real() * b_) + abs(roots[0].imag() * b_);
-            const Real rel_step = abs((sigma_[2] - prev_v) / sigma_[2]);
-            if (!tried_fixed_shifts && rel_step < kTinyRelativeStep && prev_poly_at_root > poly_at_root) {
-                tried_fixed_shifts = true;
-                ApplyFixedShiftToKPolynomial(roots[0], kInnerFixedShiftIterations);
-            }
-
-            // Divide the shifted polynomial by the quadratic polynomial.
-            QuadraticSyntheticDivision(k_polynomial_, sigma_, k_polynomial_quotient, k_polynomial_remainder);
-            d_ = k_polynomial_remainder[0];
-            c_ = k_polynomial_remainder[1] - d_ * sigma_[1];
-
-            prev_v = sigma_[2];
-            ComputeNextSigma(sigma_);
-
-            // Compute K_next using the formula above.
-            UpdateKPolynomialWithQuadraticShift(polynomial_quotient, k_polynomial_quotient);
-            Real leadingCoefficient = k_polynomial_[0];
-            for (size_t j = 0; j < k_polynomial_.size(); ++j){
-                k_polynomial_[j] /= leadingCoefficient;
-            }
-            prev_poly_at_root = poly_at_root;
-
-            // Save the roots for convergence testing.
-            roots1.push_back(roots[0]);
-            roots2.push_back(roots[1]);
-            if (roots1.size() > 3) {
-                roots1.erase(roots1.begin());
-                roots2.erase(roots2.begin());
-            }
-        }
-
-        attempted_quadratic_shift_ = true;
-        return ApplyLinearShiftToKPolynomial(root, kMaxLinearShiftIterations);
-    }
-
-
-    // Applies a linear shift to the K-polynomial to determine a single real root.
-    // Return true if a root was successfully found.
-    bool ApplyLinearShiftToKPolynomial(const std::complex<Real>& root, const int max_iterations) {
-        // Generate K-Polynomials with variable-shifts that are linear. The shift is
-        // computed as:
-        //   K_next(z) = 1 / (z - s) * (K(z) - K(s) / P(s) * P(z))
-        //   s_next = s - P(s) / K_next(s)
-
-        using namespace sw::universal;
-        using std::abs;
-
-        ++currentRecursionDepth;
-        if (attempted_linear_shift_ || currentRecursionDepth >= kMaxRecursionDepth) {
-            return false;
-        }
-
-        // Compute an initial guess for the root.
-        Real real_root = (root - EvaluateComplexPolynomial(polynomial_, root) / EvaluateComplexPolynomial(k_polynomial_, root)).real();
-
-        Vector deflated_polynomial, deflated_k_polynomial;
-        Real polynomial_at_root{ 0.0 }, k_polynomial_at_root{ 0.0 };
-
-        // This container maintains a history of the predicted roots. The convergence
-        // of the algorithm is determined by the convergence of the root value.
-        std::vector<Real> roots; // TODO: i want to change this to just Vector, but sw::blas does not have .erase
-        roots.push_back(real_root);
-        for (int i = 0; i < max_iterations; ++i) {
-            // Terminate if the root evaluation is within our tolerance. This will
-            // return false if we do not have enough samples.
-            if (HasRootConverged(roots)) {
-                AddRootToOutput(roots[1], 0);
-                polynomial_ = deflated_polynomial;
-                return true;
-            }
-
-            const Real prev_polynomial_at_root = polynomial_at_root;
-            SyntheticDivisionAndEvaluate(polynomial_, real_root, deflated_polynomial, polynomial_at_root);
-
-            // If the root is exactly the root then end early. Otherwise, the k
-            // polynomial will be filled with inf or nans.
-            if (abs(polynomial_at_root) <= kAbsoluteTolerance) {
-                AddRootToOutput(real_root, 0);
-                polynomial_ = deflated_polynomial;
-                return true;
-            }
-
-            // Update the K-Polynomial.
-            SyntheticDivisionAndEvaluate(k_polynomial_, real_root, deflated_k_polynomial, k_polynomial_at_root);
-            Real scaleFactor = -k_polynomial_at_root / polynomial_at_root;
-            Vector scaledDeflatedPoly = deflated_polynomial;
-            for (size_t j = 0; j < scaledDeflatedPoly.size(); ++j){
-                scaledDeflatedPoly[j] *= scaleFactor;
-            }
-            k_polynomial_ = AddPolynomials(deflated_k_polynomial, scaledDeflatedPoly);
-
-            Real leadingCoefficient = k_polynomial_[0];
-            for (size_t j = 0; j < k_polynomial_.size(); ++j){
-                k_polynomial_[j] /= leadingCoefficient;
-            }
-
-            // Compute the update for the root estimation.
-            k_polynomial_at_root = EvaluatePolynomial(k_polynomial_, real_root);
-            const Real delta_root = polynomial_at_root / k_polynomial_at_root;
-            real_root -= polynomial_at_root / k_polynomial_at_root;
-
-            // Save the root so that convergence can be measured. Only the 3 most
-            // recently root values are needed.
-            roots.push_back(real_root);
-            if (roots.size() > 3) { // TODO: sw::blas::vector does not have erase
-                roots.erase(roots.begin()); 
-            }
-
-            // If the linear iterations appear to be stalling then we may have found a
-            // Real real root of the form (z - x^2). Attempt a quadratic variable
-            // shift from the current estimate of the root.
-            if (i >= 2 &&
-                abs(delta_root) < 0.001 * abs(real_root) &&
-                abs(prev_polynomial_at_root) < abs(polynomial_at_root)) {
-                const std::complex<Real> new_root(real_root, 0);
-                return ApplyQuadraticShiftToKPolynomial(new_root, kMaxQuadraticShiftIterations);
-            }
-        }
-
-        attempted_linear_shift_ = true;
-        return ApplyQuadraticShiftToKPolynomial(root, kMaxQuadraticShiftIterations);
-    }
-
-
-    // Adds the root to the output variables.
-    void AddRootToOutput(const Real real, const Real imag) {
-        real_roots_[num_solved_roots_] = real;
-        complex_roots_[num_solved_roots_] = imag;
-
-        ++num_solved_roots_;
-    }
-
-    // Solves polynomials of degree <= 2.
-    bool SolveClosedFormPolynomial() {
-        const int degree = polynomial_.size() - 1;
-
-        // Is the polynomial constant?
-        if (degree == 0) {
-            std::cout << "Trying to extract roots from a constant polynomial in FindPolynomialRoots\n";
-            // We return true with no roots, not false, as if the polynomial is constant
-            // it is correct that there are no roots. It is not the case that they were
-            // there, but that we have failed to extract them.
-            return true;
-        }
-
-        // Linear
-        if (degree == 1) {
-            AddRootToOutput(FindLinearPolynomialRoots(polynomial_[0], polynomial_[1]), 0);
-            return true;
-        }
-
-        // Quadratic
-        if (degree == 2) {
-            std::vector<std::complex<Real>> roots(2);
-            FindQuadraticPolynomialRoots(polynomial_[0], polynomial_[1], polynomial_[2], roots);
-            AddRootToOutput(roots[0].real(), roots[0].imag());
-            AddRootToOutput(roots[1].real(), roots[1].imag());
-            return true;
-        }
-
-        return false;
-    }
-
-    // Helper variables to manage the polynomials as they are being manipulated
-    // and deflated.
-    Vector polynomial_;
-    Vector k_polynomial_;
-    // Sigma is the quadratic factor the divides the K-polynomial.
-    Vector sigma_;
-
-    // Let us define a, b, c, and d such that:
-    //   P(z) = Q_P * sigma(z) + b * (z + u) + a
-    //   K(z) = Q_K * sigma(z) + d * (z + u ) + c
-    //
-    // where Q_P and Q_K are the quotients from polynomial division of
-    // sigma(z). Note that this means for a given a root s of sigma:
-    //
-    //   P(s)      = a - b * s_conj
-    //   P(s_conj) = a - b * s
-    //   K(s)      = c - d * s_conj
-    //   K(s_conj) = c - d * s
-    Real a_, b_, c_, d_;
-
-    // Output reference variables.
-    Vector& real_roots_;
-    Vector& complex_roots_;
-    int num_solved_roots_;
-
-    // Keeps track of whether the linear and quadratic shifts have been attempted
-    // yet so that we do not attempt the same shift twice.
-    bool attempted_linear_shift_;
-    bool attempted_quadratic_shift_;
-
-    // Number of zero-shift iterations to perform.
-    static const int kNumZeroShiftIterations = 25;
-
-    // The number of fixed shift iterations is computed as
-    //   # roots found * this multiplier.
-    static const int kFixedShiftIterationMultiplier = 25;
-
-    // If the fixed shift iterations fail to converge, we restart this many times
-    // before considering the solve attempt as a failure.
-    static const int kMaxFixedShiftRestarts = 25;
-
-    // The maximum number of linear shift iterations to perform before considering
-    // the shift as a failure.
-    static const int kMaxLinearShiftIterations = 25;
-
-    // The maximum number of quadratic shift iterations to perform before
-    // considering the shift as a failure.
-    static const int kMaxQuadraticShiftIterations = 25;
-
-    // When quadratic shift iterations are stalling, we attempt a few fixed shift
-    // iterations to help convergence.
-    static const int kInnerFixedShiftIterations = 10;
-
-    // During quadratic iterations, the real values of the root pairs should be
-    // nearly equal since the root pairs are complex conjugates. This tolerance
-    // measures how much the real values may diverge before consider the quadratic
-    // shift to be failed.
-    inline static const Real kRootPairTolerance = Real(0.01);
-
-    // Used in HasRootConverged
-    inline static const Real kRootMagnitudeTolerance = Real(1e-8);
-
-    // Machine precision constants
-    inline static const Real mult_eps = std::numeric_limits<Real>::epsilon();
-    inline static const Real sum_eps = std::numeric_limits<Real>::epsilon();
-    inline static const Real kAbsoluteTolerance = Real(1e-14); // from 1e-14
-    inline static const Real kRelativeTolerance = Real(1e-10); // from 1e-10
-
-    // To prevent segfault on ApplyQuadraticShiftToKPolynomial and ApplyLinearShiftToKPolynomial
-    static const int kMaxRecursionDepth = 1000;
-    int currentRecursionDepth;
-};
-
-template <typename Vector>
-int FindPolynomialRootsJenkinsTraub(const Vector& polynomial, Vector& real_roots, Vector& complex_roots) {
-    JenkinsTraubSolver<Vector> solver(polynomial, real_roots, complex_roots);
-    bool solved = solver.ExtractRoots();
-    return solved ? solver.GetNumSolvedRoots() : -1;
-}
-
 // cd build/mixedprecision/roots
 // make mp_rpoly
 // ./mp_rpoly
 int main(int argc, char** argv) 
 try {
 	using namespace sw::universal;
-    srand(time(0));
+    int nrOfFailedTestCases = 0;
 
-	//bool bReportIndividualTestCases = false;
-	int nrOfFailedTestCases = 0;
+    double maxDiff {0};
+    for(int i = 0; i < 10000; ++i){
+        double op[MDP1], zeroi[MAXDEGREE], zeror[MAXDEGREE]; // Coefficient vectors
 
-    std::vector<sw::universal::blas::vector<double>> failures;
-    int complexCount = 0;
-    for(int i = 0; i < 100000; ++i){
         using Real = double;
         using Vector = sw::universal::blas::vector<Real>;
 
-        int degree = 6;
-        sw::universal::blas::vector<double> roots;
+        int degree = 2 + rand() % 15;
+        Vector roots;
         for(int j = 0; j < degree; ++j){ 
             // rand -16 to 16
-            double r = 16 * (static_cast<double>(rand()) / static_cast<double>(RAND_MAX)); 
+            double r = 32 * (static_cast<double>(rand()) / static_cast<double>(RAND_MAX)); 
             if(rand() % 2 == 0){
                 r *= -1;
             }
@@ -1096,318 +875,31 @@ try {
         }
         Vector poly = CreatePolynomialFromRoots(roots);
 
-        Vector realRoots, complexRoots;
-        FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
-        
-        std::sort(roots.begin(), roots.end());
-        std::sort(realRoots.begin(), realRoots.end());
-        bool diff = false;
-        for(size_t j = 0; j < roots.size(); ++j){
-            if(abs(roots[j] - realRoots[j]) >= 1){
-                diff = true;
-            }
+        //Input the polynomial coefficients from the file and put them in the op vector
+        for (int j = 0; j < (degree+1); ++j){
+            op[j] = poly[j];
         }
-        if(diff){
-            failures.push_back(poly);
-            bool complex = false;
-            for(auto c : complexRoots){
-                if(c != 0){
-                    complex = true;
-                }
-            }
-            if(complex){
-                complexCount += 1;
-            }
+
+        rpoly_ak1(op, &degree, zeror, zeroi);
+
+        // cout.precision(DBL_DIG);
+        // cout << "The roots follow:\n";
+        // cout << "\n";
+        Vector realRoots;
+        for (int j = 0; j < degree; ++j){
+            realRoots.push_back(zeror[j]);
+        }
+
+        std::sort(realRoots.begin(), realRoots.end());
+        std::sort(roots.begin(), roots.end());
+
+        for (int j = 0; j < degree; ++j){
+            double diff = abs(realRoots[j] - roots[j]);
+            maxDiff = diff > maxDiff ? diff : maxDiff;
         }
     }
-    std::cout << complexCount << '\n';
-    std::cout << failures.size() << '\n';
-    // int failCount = -1;
-    // for(int i = 0; i < 10; ++i){
-    //     std::vector<sw::universal::blas::vector<double>> failures2;
-    //     for(auto poly : failures){
-    //         using Real = double;
-    //         using Vector = sw::universal::blas::vector<Real>;
-
-    //         Vector realRoots, complexRoots;
-    //         FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
-            
-    //         std::sort(poly.begin(), poly.end());
-    //         std::sort(realRoots.begin(), realRoots.end());
-    //         bool diff = false;
-    //         for(size_t j = 0; j < poly.size(); ++j){
-    //             // std::cout << abs(failure[j] - realRoots[j]) << '\n';
-    //             if(abs(poly[j] - realRoots[j]) >= 1){
-    //                 diff = true;
-    //             }
-    //         }
-    //         if(diff){
-    //             failures2.push_back(poly);
-    //             // std::cout << failure << '\n';
-    //             // std::cout << realRoots << '\n';
-    //         }
-    //     }
-    //     if(failCount == -1){
-    //         std::cout << failures2.size() << '\n';
-    //         failCount = failures2.size();
-    //     }
-    //     else if(failCount != failures2.size()){
-    //         std::cout << "Changed\n";
-    //     }
-    // }   
+    std::cout << maxDiff << '\n';
     
-    
-    
-    
-    // {
-    //     using Real = double;
-    //     using Vector = sw::universal::blas::vector<Real>;
-
-    //     Vector roots = { -15.5822, -11.1035, -9.03839, -7.14378, -5.38557, -2.84916, 0.293871, 11.3624 };
-    //     Vector poly = CreatePolynomialFromRoots(roots);
-
-    //     Vector realRoots, complexRoots;
-    //     FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
-        
-    //     std::sort(roots.begin(), roots.end());
-    //     std::sort(realRoots.begin(), realRoots.end());
-    //     std::cout << roots << '\n';
-    //     std::cout << realRoots << '\n';
-    // }
-
-    // { 
-    //     std::ofstream file("data.csv");
-    //     file << "minVal,maxVal,better\n";
-
-    //     // When you see any result check any within close range of testing
-    //     // Test within local regions of each test
-    //     srand(time(0));
-    //     int i {0};
-    //     int failuresDouble {0};
-    //     int failuresPosit {0};
-    //     int failuresFloat {0};
-    //     double maxDoubleSqrDiff {0};
-    //     double maxPositSqrDiff {0};
-    //     double maxFloatSqrDiff {0};
-    //     while(i < 1000){
-    //         int degree = 2 + rand() % 7; // degree 2-8
-    //         sw::universal::blas::vector<double> randRoots;
-    //         for(int j = 0; j < degree; ++j){ 
-    //             // rand -16 to 16
-    //             double r = 16 * (static_cast<double>(rand()) / static_cast<double>(RAND_MAX)); 
-    //             if(rand() % 2 == 0){
-    //                 r *= -1;
-    //             }
-    //             randRoots.push_back(r); 
-    //         }
-            
-    //         sw::universal::blas::vector<double> randPoly = CreatePolynomialFromRoots(randRoots);
-    //         int numSolvedRoots1 = 0;
-    //         double squaredDiff1 = 0;
-    //         int numSolvedRoots2 = 0;
-    //         double squaredDiff2 = 0;
-
-    //         {
-    //             using Real = double;
-    //             using Vector = sw::universal::blas::vector<Real>;
-
-    //             Vector poly;
-    //             for(auto val : randPoly){
-    //                 poly.push_back(val);
-    //             }
-    //             Vector realRoots, complexRoots;
-    //             numSolvedRoots2 = FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
-                
-    //             std::sort(randRoots.begin(), randRoots.end());
-    //             std::sort(realRoots.begin(), realRoots.end());
-
-    //             for(size_t i = 0; i < randRoots.size(); ++i){
-    //                 if(numSolvedRoots2 != -1){
-    //                     double sqrDiff = (randRoots[i] - static_cast<double>(realRoots[i])) * (randRoots[i] - static_cast<double>(realRoots[i]));
-    //                     if(sqrDiff > 1){
-    //                         std::cout << realRoots << '\n';
-    //                         std::cout << randRoots << '\n';
-    //                     }
-    //                     maxDoubleSqrDiff = sqrDiff > maxDoubleSqrDiff ? sqrDiff : maxDoubleSqrDiff;
-    //                 }
-    //             }
-    //         }
-    //         // {
-    //         //     using Real = LoggingPosit<32, 2>;
-    //         //     Real::log.clear();
-    //         //     using Vector = std::vector<Real>;
-
-    //         //     Vector poly;
-    //         //     for(auto val : randPoly){
-    //         //         poly.push_back(val);
-    //         //     }
-    //         //     Vector realRoots, complexRoots;
-    //         //     numSolvedRoots1 = FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
-    //         //     if(numSolvedRoots1 == -1){
-    //         //         failuresPosit += 1;
-    //         //     }
-
-    //         //     std::sort(randRoots.begin(), randRoots.end());
-    //         //     std::sort(realRoots.begin(), realRoots.end());
-
-    //         //     for(size_t i = 0; i < randRoots.size(); ++i){
-    //         //         double sqrDiff = (randRoots[i] - static_cast<double>(realRoots[i])) * (randRoots[i] - static_cast<double>(realRoots[i]));
-    //         //         if(numSolvedRoots1 != -1){
-    //         //             maxPositSqrDiff = sqrDiff > maxPositSqrDiff ? sqrDiff : maxPositSqrDiff;
-    //         //             squaredDiff1 += sqrDiff;
-    //         //         } 
-    //         //     }
-    //         //     for(size_t i = 0; i < Real::log.size(); ++i){
-    //         //         Real::log[i] = abs(Real::log[i]);
-    //         //     }
-    //         // }
-    //         // {
-    //         //     using Real = float;
-    //         //     using Vector = sw::universal::blas::vector<Real>;
-
-    //         //     Vector poly;
-    //         //     for(auto val : randPoly){
-    //         //         poly.push_back(val);
-    //         //     }
-    //         //     Vector realRoots, complexRoots;
-                
-    //         //     numSolvedRoots2 = FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
-    //         //     if(numSolvedRoots2 == -1){
-    //         //         failuresFloat += 1;
-    //         //     }
-
-    //         //     std::sort(randRoots.begin(), randRoots.end());
-    //         //     std::sort(realRoots.begin(), realRoots.end());
-
-    //         //     for(size_t i = 0; i < randRoots.size(); ++i){
-    //         //         squaredDiff2 += (randRoots[i] - static_cast<double>(realRoots[i])) * (randRoots[i] - static_cast<double>(realRoots[i]));
-    //         //         if(numSolvedRoots2 != -1){
-    //         //             double sqrDiff = (randRoots[i] - static_cast<double>(realRoots[i])) * (randRoots[i] - static_cast<double>(realRoots[i]));
-    //         //             // if(sqrDiff > 1){
-    //         //             //     std::cout << realRoots << '\n';
-    //         //             //     std::cout << randRoots << '\n';
-    //         //             // }
-    //         //             maxFloatSqrDiff = sqrDiff > maxFloatSqrDiff ? sqrDiff : maxFloatSqrDiff;
-    //         //         }
-    //         //     }
-    //         // }
-
-    //         // auto minElem = *std::min_element(LoggingPosit<32, 2>::log.begin(), LoggingPosit<32, 2>::log.end());
-    //         // auto maxElem = *std::max_element(LoggingPosit<32, 2>::log.begin(), LoggingPosit<32, 2>::log.end());
-    //         // if(numSolvedRoots1 != -1 || numSolvedRoots2 != -1){
-    //         //     if(numSolvedRoots1 != 1 && numSolvedRoots2 == -1){
-    //         //     file << std::format("{},{},{}\n", to_string(minElem), to_string(maxElem), 2); // 2 = posit converged (and float did not)
-    //         //     }
-    //         //     else if(numSolvedRoots2 > numSolvedRoots1){
-    //         //         file << std::format("{},{},{}\n", to_string(minElem), to_string(maxElem), -2); // -2 = float converged (and posit did not)
-    //         //     }
-    //         //     else{
-    //         //         if(squaredDiff1 < squaredDiff2){
-    //         //             file << std::format("{},{},{}\n", to_string(minElem), to_string(maxElem), 1); // 1 = posit was more precise (both converged)
-    //         //         }
-    //         //         else if(squaredDiff1 == squaredDiff2){
-    //         //             file << std::format("{},{},{}\n", to_string(minElem), to_string(maxElem), -1); // -1 = float was more precise (both converged)
-    //         //         }
-    //         //         else{
-    //         //             file << std::format("{},{},{}\n", to_string(minElem), to_string(maxElem), 0); // 0 = both equal (both converged)
-    //         //         }
-    //         //     } 
-
-    //         //     // NOTE: this is inside the condition that one of the two converged
-    //         // }
-    //         ++i;
-    //     }
-    //     // std::cout << "Double: " << failuresDouble << '\n';
-    //     // std::cout << "Posit: " << failuresPosit << '\n';
-    //     // std::cout << "sqr diff: " << maxPositSqrDiff << '\n';
-    //     // std::cout << "Float: " << failuresFloat << '\n';
-    //     // std::cout << "sqr diff: " << maxFloatSqrDiff << '\n';
-    //     // std::cout << "Double max sqr diff: " << maxDoubleSqrDiff << '\n';
-    // }
-
-    
-
-    // {
-    //     using Real = float;
-    //     using Vector = blas::vector<Real>;
-
-    //     Vector roots(5, 1);
-    //     for(size_t i = 0; i < roots.size(); i++){
-    //         roots[i] += (i % 2 == 1 ? -1 : 1) * Real(1 / pow(2, i+1)); 
-    //         if(i % 2 == 1) roots[i] *= -1;
-    //     }
-    //     std::cout << "root: " << roots << '\n';
-    //     Vector poly = CreatePolynomialFromRoots(roots);
-    //     std::cout << "poly: " << poly << '\n';
-
-    //     Vector realRoots, complexRoots;
-
-    //     FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
-    //     std::cout << "real: " << realRoots << '\n';
-    //     std::cout << "cplx: " << complexRoots << '\n';
-    // }
-    // {
-    //     using Real = posit<16, 2>;
-    //     using Vector = blas::vector<Real>;
-
-    //     Vector roots(5, 1);
-    //     for(size_t i = 0; i < roots.size(); i++){
-    //         roots[i] += (i % 2 == 1 ? -1 : 1) * Real(1 / pow(2, i+1)); 
-    //         if(i % 2 == 1) roots[i] *= -1;
-    //     }
-    //     std::cout << "root: " << roots << '\n';
-    //     Vector poly = CreatePolynomialFromRoots(roots);
-    //     std::cout << "poly: " << poly << '\n';
-
-    //     Vector realRoots, complexRoots;
-
-    //     FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
-    //     std::cout << "real: " << realRoots << '\n';
-    //     std::cout << "cplx: " << complexRoots << '\n';
-    // }
-    // {
-    //     using Real = LoggingPosit<32, 2>;
-    //     using Vector = blas::vector<Real>;
-
-    //     Vector roots = {1, 1, 1.5, 1.5, 2, 2};
-    //     double mod = 1e-6;
-    //     for(size_t i = 0; i < roots.size(); i++){
-    //         roots[i] += i * Real(mod * pow(2, i));
-    //         if(i % 2 == 1) roots[i] *= -1;
-    //     }
-    //     std::cout << "root: " << roots << '\n';
-    //     Vector poly = CreatePolynomialFromRoots(roots);
-    //     std::cout << "poly: " << poly << '\n';
-
-    //     Vector realRoots, complexRoots;
-
-    //     FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
-    //     std::cout << "real: " << realRoots << '\n';
-    //     std::cout << "cplx: " << complexRoots << '\n';
-
-
-    // }
-    // {
-    //     constexpr bool hasSubnormal = true;
-    //     constexpr bool hasSupernormal = true;
-    //     constexpr bool isSaturating = false;
-    //     using Real = cfloat<28, 10, std::uint16_t, hasSubnormal, hasSupernormal, isSaturating>;
-    //     using Vector = blas::vector<Real>;
-
-    //     Vector roots = {6, -1.5, 8};
-    //     Vector poly = CreatePolynomialFromRoots(roots);
-
-    //     Vector realRoots, complexRoots;
-
-    //     FindPolynomialRootsJenkinsTraub(poly, realRoots, complexRoots);
-    //     std::cout << realRoots << '\n';
-    //     std::cout << complexRoots << '\n';
-    // }
-
-    
-
-
-
 	return (nrOfFailedTestCases > 0 ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 catch (char const* msg) {
